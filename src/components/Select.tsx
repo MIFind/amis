@@ -7,13 +7,14 @@
 
 import {uncontrollable} from 'uncontrollable';
 import React from 'react';
+import VirtualList from './virtual-list';
 import Overlay from './Overlay';
 import PopOver from './PopOver';
 import Downshift, {ControllerStateAndHelpers} from 'downshift';
 import {closeIcon, Icon} from './icons';
 // @ts-ignore
 import matchSorter from 'match-sorter';
-import {noop, isObject, findTree} from '../utils/helper';
+import {noop, isObject, findTree, autobind} from '../utils/helper';
 import find from 'lodash/find';
 import isPlainObject from 'lodash/isPlainObject';
 import union from 'lodash/union';
@@ -25,47 +26,10 @@ import Input from './Input';
 import {Api} from '../types';
 import {LocaleProps, localeable} from '../locale';
 import Spinner from './Spinner';
+import {Option, Options} from '../Schema';
+import {withRemoteOptions} from './WithRemoteOptions';
 
-export interface Option {
-  label?: string;
-
-  // 可以用来给 Option 标记个范围，让数据展示更清晰。
-  // 这个只有在数值展示的时候显示。
-  scopeLabel?: string;
-
-  // 请保证数值唯一，多个选项值一致会认为是同一个选项。
-  value?: any;
-
-  // 是否禁用
-  disabled?: boolean;
-
-  // 支持嵌套
-  children?: Options;
-
-  // 是否可见
-  visible?: boolean;
-
-  // 最好不要用！因为有 visible 就够了。
-  hidden?: boolean;
-
-  // 描述
-  description?: string;
-
-  // 标记后数据延时加载
-  defer?: boolean;
-
-  // 如果设置了，优先级更高，不设置走 source 接口加载。
-  deferApi?: Api;
-
-  // 标记正在加载。只有 defer 为 true 时有意义。内部字段不可以外部设置
-  loading?: boolean;
-
-  // 只有设置了 defer 才有意义，内部字段不可以外部设置
-  loaded?: boolean;
-
-  [propName: string]: any;
-}
-export interface Options extends Array<Option> {}
+export {Option, Options};
 
 export interface OptionProps {
   className?: string;
@@ -75,10 +39,12 @@ export interface OptionProps {
   labelField?: string;
   simpleValue?: boolean; // 默认onChange 出去是整个 option 节点，如果配置了 simpleValue 就只包含值。
   options: Options;
+  loading?: boolean;
   joinValues?: boolean;
   extractValue?: boolean;
   delimiter?: string;
   clearable?: boolean;
+  resetValue: any;
   placeholder?: string;
   disabled?: boolean;
   creatable?: boolean;
@@ -282,12 +248,23 @@ interface SelectProps extends OptionProps, ThemeProps, LocaleProps {
   multiple: boolean;
   valueField: string;
   labelField: string;
+  renderMenu?: (
+    item: Option,
+    states: {
+      index: number;
+      multiple?: boolean;
+      checkAll?: boolean;
+      checked: boolean;
+      onChange: () => void;
+      inputValue?: string;
+      searchable?: boolean;
+    }
+  ) => JSX.Element;
   searchable?: boolean;
   options: Array<Option>;
   value: any;
   loadOptions?: Function;
   searchPromptText: string;
-  loading?: boolean;
   loadingPlaceholder: string;
   spinnerClassName?: string;
   noResultsText: string;
@@ -310,6 +287,7 @@ interface SelectProps extends OptionProps, ThemeProps, LocaleProps {
 }
 
 interface SelectState {
+  itemHeight: number;
   isOpen: boolean;
   isFocused: boolean;
   inputValue: string;
@@ -322,19 +300,20 @@ export class Select extends React.Component<SelectProps, SelectState> {
     multiple: false,
     clearable: true,
     creatable: false,
-    createBtnLabel: '新增选项',
-    searchPromptText: '输入内容进行检索',
-    loadingPlaceholder: '加载中..',
-    noResultsText: '未找到任何结果',
-    clearAllText: '移除所有',
-    clearValueText: '移除',
-    placeholder: '请选择',
+    createBtnLabel: 'Select.createLabel',
+    searchPromptText: 'Select.searchPromptText',
+    loadingPlaceholder: 'loading',
+    noResultsText: 'noResult',
+    clearAllText: 'Select.clearAll',
+    clearValueText: 'Select.clear',
+    placeholder: 'Select.placeholder',
     valueField: 'value',
     labelField: 'label',
+    resetValue: '',
     inline: false,
     disabled: false,
     checkAll: false,
-    checkAllLabel: '全选',
+    checkAllLabel: 'Select.checkAll',
     defaultCheckAll: false,
     overlayPlacement: 'auto'
   };
@@ -370,7 +349,8 @@ export class Select extends React.Component<SelectProps, SelectState> {
       isFocused: false,
       inputValue: '',
       highlightedIndex: -1,
-      selection: value2array(props.value, props)
+      selection: value2array(props.value, props),
+      itemHeight: 35
     };
   }
 
@@ -400,16 +380,46 @@ export class Select extends React.Component<SelectProps, SelectState> {
     loadOptions && loadOptions('');
   }
 
-  componentWillReceiveProps(nextProps: SelectProps) {
+  componentDidUpdate(prevProps: SelectProps) {
     const props = this.props;
+    let fn: () => void = noop;
 
     if (
-      props.value !== nextProps.value ||
-      JSON.stringify(props.options) !== JSON.stringify(nextProps.options)
+      props.value !== prevProps.value ||
+      JSON.stringify(props.options) !== JSON.stringify(prevProps.options)
     ) {
-      this.setState({
-        selection: value2array(nextProps.value, nextProps)
-      });
+      let selection: Array<Option>;
+      if (
+        (!prevProps.options || !prevProps.options.length) &&
+        props.options.length
+      ) {
+        const {selection: stateSelection} = this.state;
+        const {
+          multiple,
+          defaultCheckAll,
+          options,
+          onChange,
+          simpleValue
+        } = props;
+        if (multiple && defaultCheckAll && options.length) {
+          selection = union(options, stateSelection);
+          fn = () =>
+            onChange(
+              simpleValue ? selection.map(item => item.value) : selection
+            );
+        } else {
+          selection = value2array(props.value, props);
+        }
+      } else {
+        selection = value2array(props.value, props);
+      }
+
+      this.setState(
+        {
+          selection: selection
+        },
+        fn
+      );
     }
   }
 
@@ -522,7 +532,6 @@ export class Select extends React.Component<SelectProps, SelectState> {
 
   handleInputChange(evt: React.ChangeEvent<HTMLInputElement>) {
     const {loadOptions} = this.props;
-
     this.setState(
       {
         inputValue: evt.currentTarget.value
@@ -571,6 +580,7 @@ export class Select extends React.Component<SelectProps, SelectState> {
         break;
       case DownshiftChangeTypes.changeInput:
         update.highlightedIndex = 0;
+        break;
       case DownshiftChangeTypes.keyDownArrowDown:
       case DownshiftChangeTypes.keyDownArrowUp:
       case DownshiftChangeTypes.itemMouseEnter:
@@ -590,7 +600,7 @@ export class Select extends React.Component<SelectProps, SelectState> {
   }
 
   handleKeyPress(e: React.KeyboardEvent) {
-    if (e.key === ' ') {
+    if (this.props.multiple && e.key === ' ') {
       this.toggle();
       e.preventDefault();
     }
@@ -600,7 +610,7 @@ export class Select extends React.Component<SelectProps, SelectState> {
     const onChange = this.props.onChange;
     e.preventDefault();
     e.stopPropagation();
-    onChange('');
+    onChange(this.props.resetValue);
   }
 
   handleAddClick() {
@@ -620,6 +630,11 @@ export class Select extends React.Component<SelectProps, SelectState> {
     e.preventDefault();
     e.stopPropagation();
     onDelete && onDelete(item);
+  }
+
+  @autobind
+  menuItemRef(ref: any) {
+    ref && this.setState({itemHeight: ref.offsetHeight});
   }
 
   renderValue({inputValue, isOpen}: ControllerStateAndHelpers<any>) {
@@ -655,12 +670,12 @@ export class Select extends React.Component<SelectProps, SelectState> {
             ×
           </span>
           <span className={`${ns}Select-valueLabel`}>
-            {item[labelField || 'label']}
+            {`${item[labelField || 'label']}`}
           </span>
         </div>
       ) : (
         <div className={`${ns}Select-value`} key={index}>
-          {item[labelField || 'label']}
+          {`${item[labelField || 'label']}`}
         </div>
       )
     );
@@ -694,7 +709,8 @@ export class Select extends React.Component<SelectProps, SelectState> {
       editable,
       removable,
       overlayPlacement,
-      translate: __
+      translate: __,
+      renderMenu
     } = this.props;
     const {selection} = this.state;
 
@@ -718,6 +734,95 @@ export class Select extends React.Component<SelectProps, SelectState> {
         option => selectionValues.indexOf(option) > -1
       );
     }
+
+    const itemHeight = this.state.itemHeight;
+
+    // 渲染单个选项
+    const renderItem = ({index, style}: {index: number; style?: object}) => {
+      const item = filtedOptions[index];
+      const checked =
+        selectedItem === item || !!~selectionValues.indexOf(item[valueField]);
+      return (
+        <div
+          {...getItemProps({
+            key:
+              typeof item.value === 'string'
+                ? `${item.label}-${item.value}`
+                : index,
+            index,
+            item,
+            disabled: item.disabled
+          })}
+          style={style}
+          className={cx(`Select-option`, {
+            'is-disabled': item.disabled,
+            'is-highlight': highlightedIndex === index,
+            'is-active': checked
+          })}
+        >
+          {removable ? (
+            <a data-tooltip={__('Select.clear')} data-position="left">
+              <Icon
+                icon="minus"
+                className="icon"
+                onClick={(e: any) => this.handleDeleteClick(e, item)}
+              />
+            </a>
+          ) : null}
+          {editable ? (
+            <a data-tooltip="编辑" data-position="left">
+              <Icon
+                icon="pencil"
+                className="icon"
+                onClick={(e: any) => this.handleEditClick(e, item)}
+              />
+            </a>
+          ) : null}
+
+          {renderMenu ? (
+            renderMenu(item, {
+              multiple,
+              checkAll,
+              checked,
+              onChange: () => this.handleChange(item),
+              inputValue: inputValue || '',
+              searchable,
+              index
+            })
+          ) : checkAll || multiple ? (
+            <Checkbox
+              checked={checked}
+              trueValue={item.value}
+              onChange={() => {
+                this.handleChange(item);
+              }}
+              disabled={item.disabled}
+            >
+              {item.disabled
+                ? item[labelField]
+                : highlight(
+                    item[labelField],
+                    inputValue as string,
+                    cx('Select-option-hl')
+                  )}
+
+              {item.tip}
+            </Checkbox>
+          ) : (
+            <span>
+              {item.disabled
+                ? item[labelField]
+                : highlight(
+                    item[labelField],
+                    inputValue as string,
+                    cx('Select-option-hl')
+                  )}
+              {item.tip}
+            </span>
+          )}
+        </div>
+      );
+    };
 
     const menu = (
       <div ref={this.menu} className={cx('Select-menu')}>
@@ -753,86 +858,9 @@ export class Select extends React.Component<SelectProps, SelectState> {
           </div>
         ) : null}
 
-        {/* todo 当数目比较多的时候会卡顿，需要优化这个滚动。 */}
-        {filtedOptions.length ? (
-          filtedOptions.map((item, index) => {
-            const checked =
-              selectedItem === item ||
-              !!~selectionValues.indexOf(item[valueField]);
-
-            return (
-              <div
-                {...getItemProps({
-                  key:
-                    typeof item.value === 'string'
-                      ? `${item.label}-${item.value}`
-                      : index,
-                  index,
-                  item,
-                  disabled: item.disabled
-                })}
-                className={cx(`Select-option`, {
-                  'is-disabled': item.disabled,
-                  'is-highlight': highlightedIndex === index,
-                  'is-active': checked
-                })}
-              >
-                {removable ? (
-                  <a data-tooltip="移除" data-position="left">
-                    <Icon
-                      icon="minus"
-                      className="icon"
-                      onClick={(e: any) => this.handleDeleteClick(e, item)}
-                    />
-                  </a>
-                ) : null}
-                {editable ? (
-                  <a data-tooltip="编辑" data-position="left">
-                    <Icon
-                      icon="pencil"
-                      className="icon"
-                      onClick={(e: any) => this.handleEditClick(e, item)}
-                    />
-                  </a>
-                ) : null}
-
-                {checkAll || multiple ? (
-                  <Checkbox
-                    checked={checked}
-                    trueValue={item.value}
-                    onChange={() => {
-                      this.handleChange(item);
-                    }}
-                    disabled={item.disabled}
-                  >
-                    {item.disabled
-                      ? item[labelField]
-                      : highlight(
-                          item[labelField],
-                          inputValue as string,
-                          cx('Select-option-hl')
-                        )}
-
-                    {item.tip}
-                  </Checkbox>
-                ) : (
-                  <span>
-                    {item.disabled
-                      ? item[labelField]
-                      : highlight(
-                          item[labelField],
-                          inputValue as string,
-                          cx('Select-option-hl')
-                        )}
-                    {item.tip}
-                  </span>
-                )}
-              </div>
-            );
-          })
-        ) : (
-          <div className={cx('Select-noResult')}>{__(noResultsText)}</div>
-        )}
+        <div ref={this.menuItemRef} className={cx('Select-option invisible')}>
+          <span>Placeholder</span>
+        </div>
 
         {creatable && !disabled ? (
           <a className={cx('Select-addBtn')} onClick={this.handleAddClick}>
@@ -840,6 +868,27 @@ export class Select extends React.Component<SelectProps, SelectState> {
             {__(createBtnLabel)}
           </a>
         ) : null}
+
+        {filtedOptions.length ? (
+          filtedOptions.length > 100 ? ( // 超过 100 行数据才启用 virtuallist 避免滚动条问题
+            <VirtualList
+              height={
+                filtedOptions.length > 8
+                  ? 266
+                  : filtedOptions.length * itemHeight
+              }
+              itemCount={filtedOptions.length}
+              itemSize={itemHeight}
+              renderItem={renderItem}
+            />
+          ) : (
+            filtedOptions.map((item, index) => {
+              return renderItem({index});
+            })
+          )
+        ) : (
+          <div className={cx('Select-noResult')}>{__(noResultsText)}</div>
+        )}
       </div>
     );
 
@@ -853,7 +902,11 @@ export class Select extends React.Component<SelectProps, SelectState> {
         <PopOver
           overlay
           className={cx('Select-popover')}
-          style={{minWidth: this.target ? this.target.offsetWidth : 'auto'}}
+          style={{
+            minWidth: this.target
+              ? this.target.getBoundingClientRect().width
+              : 'auto'
+          }}
           onHide={this.close}
         >
           {menu}
@@ -879,6 +932,7 @@ export class Select extends React.Component<SelectProps, SelectState> {
 
     const selection = this.state.selection;
     const inputValue = this.state.inputValue;
+    const resetValue = this.props.resetValue;
 
     return (
       <Downshift
@@ -893,7 +947,7 @@ export class Select extends React.Component<SelectProps, SelectState> {
             : this.handleChange
         }
         onStateChange={this.handleStateChange}
-        itemToString={item => (item ? item[labelField] : '')}
+        itemToString={item => (item ? `${item[labelField]}` : '')}
       >
         {(options: ControllerStateAndHelpers<any>) => {
           const {isOpen} = options;
@@ -920,7 +974,9 @@ export class Select extends React.Component<SelectProps, SelectState> {
               <div className={cx(`Select-valueWrap`)}>
                 {this.renderValue(options)}
               </div>
-              {clearable && !disabled && value && value.length ? (
+              {clearable &&
+              !disabled &&
+              (Array.isArray(value) ? value.length : value !== resetValue) ? (
                 <a onClick={this.clearValue} className={cx('Select-clear')}>
                   <Icon icon="close" className="icon" />
                 </a>
@@ -945,10 +1001,21 @@ export class Select extends React.Component<SelectProps, SelectState> {
   }
 }
 
-export default themeable(
+const enhancedSelect = themeable(
   localeable(
     uncontrollable(Select, {
       value: 'onChange'
     })
   )
 );
+
+export default enhancedSelect;
+export const SelectWithRemoteOptions = withRemoteOptions(
+  enhancedSelect
+) as React.ComponentType<
+  React.ComponentProps<typeof enhancedSelect> & {
+    source?: any;
+    options?: Options;
+    data?: any;
+  }
+>;

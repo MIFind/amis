@@ -1,20 +1,14 @@
-export interface ApiObject {
-  url: string;
-  method: 'get' | 'post' | 'put' | 'patch' | 'delete';
-  data?: object;
-  headers?: PlainObject;
+import {SchemaApiObject} from './Schema';
+
+export interface ApiObject extends SchemaApiObject {
   config?: {
     withCredentials?: boolean;
     cancelExecutor?: (cancel: Function) => void;
   };
-  reload?: string;
-  sendOn?: string;
+  body?: PlainObject;
+  query?: PlainObject;
   adaptor?: (payload: object, response: fetcherResult, api: ApiObject) => any;
   requestAdaptor?: (api: ApiObject) => ApiObject;
-  cache?: number;
-  qsOptions?: any;
-  dataType?: 'json' | 'form-data' | 'form';
-  replaceData?: boolean;
 }
 export type ApiString = string;
 export type Api = ApiString | ApiObject;
@@ -74,7 +68,7 @@ export interface Button {
   className?: string;
 }
 
-export type SchemaNode = number | string | Schema | SchemaArray;
+export type SchemaNode = Schema | string | Array<Schema | string>;
 export interface SchemaArray extends Array<SchemaNode> {}
 export interface Definitions {
   [propName: string]: SchemaNode;
@@ -97,9 +91,12 @@ export interface Action extends Button {
     | 'delete'
     | 'edit'
     | 'cancel'
-    | 'close'
     | 'next'
-    | 'prev';
+    | 'prev'
+    | 'reset'
+    | 'reset-and-submit'
+    | 'clear'
+    | 'clear-and-submit';
   api?: Api;
   asyncApi?: Api;
   payload?: any;
@@ -134,10 +131,10 @@ export interface PlainObject {
 
 export interface RendererData {
   [propsName: string]: any;
-  __prev?: RendererDataAlis;
+  __prev?: RendererDataAlias;
   __super?: RendererData;
 }
-type RendererDataAlis = RendererData;
+type RendererDataAlias = RendererData;
 
 export type FunctionPropertyNames<T> = {
   [K in keyof T]: T[K] extends Function ? K : never;

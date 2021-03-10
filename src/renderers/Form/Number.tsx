@@ -1,9 +1,42 @@
 import React from 'react';
-import {FormItem, FormControlProps} from './Item';
+import {FormItem, FormControlProps, FormBaseControl} from './Item';
 import cx from 'classnames';
-// @ts-ignore
-import InputNumber from 'rc-input-number';
 import {filter} from '../../utils/tpl';
+import NumberInput from '../../components/NumberInput';
+import {FormOptionsControl} from './Options';
+
+/**
+ * 数字输入框
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/number
+ */
+export interface NumberControlSchema extends FormBaseControl {
+  type: 'number';
+
+  /**
+   * 最大值
+   */
+  max?: number;
+
+  /**
+   * 最小值
+   */
+  min?: number;
+
+  /**
+   * 步长
+   */
+  step?: number;
+
+  /**
+   * 精度
+   */
+  precision?: number;
+
+  /**
+   * 默认当然是
+   */
+  showSteps?: boolean;
+}
 
 export interface NumberProps extends FormControlProps {
   placeholder?: string;
@@ -28,7 +61,11 @@ export default class NumberControl extends React.Component<NumberProps, any> {
   handleChange(inputValue: any) {
     const {classPrefix: ns, onChange, resetValue} = this.props;
 
-    onChange(typeof inputValue === 'undefined' ? resetValue || '' : inputValue);
+    if (inputValue && typeof inputValue !== 'number') {
+      return;
+    }
+
+    onChange(inputValue === null ? resetValue ?? null : inputValue);
   }
 
   filterNum(value: number | string | undefined) {
@@ -49,19 +86,20 @@ export default class NumberControl extends React.Component<NumberProps, any> {
       max,
       min,
       disabled,
-      placeholder
+      placeholder,
+      showSteps
     } = this.props;
 
     let precisionProps: any = {};
 
-    if (typeof precision === 'number') {
-      precisionProps.precision = precision;
+    const finalPrecision = this.filterNum(precision);
+    if (typeof finalPrecision === 'number') {
+      precisionProps.precision = finalPrecision;
     }
 
     return (
       <div className={cx(`${ns}NumberControl`, className)}>
-        <InputNumber
-          prefixCls={`${ns}Number`}
+        <NumberInput
           value={value}
           step={step}
           max={this.filterNum(max)}
@@ -69,7 +107,8 @@ export default class NumberControl extends React.Component<NumberProps, any> {
           onChange={this.handleChange}
           disabled={disabled}
           placeholder={placeholder}
-          {...precisionProps}
+          precision={finalPrecision}
+          showSteps={showSteps}
         />
       </div>
     );

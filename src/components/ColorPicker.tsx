@@ -25,7 +25,7 @@ export interface ColorProps extends LocaleProps, ThemeProps {
   disabled?: boolean;
   popOverContainer?: any;
   placement?: string;
-  value: any;
+  value?: any;
   onChange: (value: any) => void;
   presetColors?: string[];
   resetValue?: string;
@@ -45,7 +45,7 @@ export class ColorControl extends React.PureComponent<
   static defaultProps = {
     format: 'hex',
     clearable: true,
-    placeholder: '请选择颜色',
+    placeholder: 'ColorPicker.placeholder',
     allowCustomColor: true
     // closeOnSelect: true
   };

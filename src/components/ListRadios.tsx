@@ -21,6 +21,7 @@ export interface BaseRadiosProps extends ThemeProps, LocaleProps {
   disabled?: boolean;
   clearable?: boolean;
   showRadio?: boolean;
+  onClick?: (e: React.MouseEvent) => void;
 }
 
 export class BaseRadios<
@@ -30,7 +31,7 @@ export class BaseRadios<
   selected: Option | undefined | null;
 
   static defaultProps = {
-    placeholder: '暂无选项',
+    placeholder: 'placeholder.noOption',
     itemRender: (option: Option) => <span>{option.label}</span>
   };
   static resolveSelected(
@@ -119,7 +120,8 @@ export class BaseRadios<
       className,
       placeholder,
       classnames: cx,
-      option2value
+      option2value,
+      onClick
     } = this.props;
     const __ = this.props.translate;
 
@@ -131,7 +133,7 @@ export class BaseRadios<
     }
 
     return (
-      <div className={cx('ListRadios', className)}>
+      <div className={cx('ListRadios', className)} onClick={onClick}>
         {body && body.length ? (
           body
         ) : (

@@ -12,7 +12,8 @@ import {
 import {findDOMNode} from 'react-dom';
 import React from 'react';
 import {calculatePosition, getContainer, ownerDocument} from '../utils/dom';
-import {autobind} from '../utils/helper';
+import {autobind, noop} from '../utils/helper';
+import {resizeSensor, getComputedStyle} from '../utils/resize-sensor';
 
 // @ts-ignore
 BasePosition.propTypes.placement = () => null;
@@ -21,6 +22,8 @@ BasePosition.propTypes.placement = () => null;
 class Position extends BasePosition {
   props: any;
   _lastTarget: any;
+  resizeDispose: Array<() => void>;
+  watchedTarget: any;
   setState: (state: any) => void;
 
   updatePosition(target: any) {
@@ -35,11 +38,26 @@ class Position extends BasePosition {
       });
     }
 
-    const overlay = findDOMNode(this as any);
+    const watchTargetSizeChange = this.props.watchTargetSizeChange;
+    const overlay = findDOMNode(this as any) as HTMLElement;
     const container = getContainer(
       this.props.container,
       ownerDocument(this).body
     );
+
+    if (
+      (!this.watchedTarget || this.watchedTarget !== target) &&
+      getComputedStyle(target, 'position') !== 'static'
+    ) {
+      this.resizeDispose?.forEach(fn => fn());
+      this.watchedTarget = target;
+      this.resizeDispose = [
+        watchTargetSizeChange !== false
+          ? resizeSensor(target, () => this.updatePosition(target))
+          : noop,
+        resizeSensor(overlay, () => this.updatePosition(target))
+      ];
+    }
 
     this.setState(
       calculatePosition(
@@ -50,6 +68,10 @@ class Position extends BasePosition {
         this.props.containerPadding
       )
     );
+  }
+
+  componentWillUnmount() {
+    this.resizeDispose?.forEach(fn => fn());
   }
 }
 
@@ -63,6 +85,7 @@ interface OverlayProps {
   onHide?(props: any, ...args: any[]): any;
   container?: React.ReactNode | Function;
   target?: React.ReactNode | Function;
+  watchTargetSizeChange?: boolean;
 
   onEnter?(node: HTMLElement): any;
   onEntering?(node: HTMLElement): any;
@@ -116,6 +139,7 @@ export default class Overlay extends React.Component<
       shouldUpdatePosition,
       rootClose,
       children,
+      watchTargetSizeChange,
       transition: Transition,
       ...props
     } = this.props;

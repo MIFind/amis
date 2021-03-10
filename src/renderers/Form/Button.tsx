@@ -1,9 +1,18 @@
 import React from 'react';
-import {FormItem, FormControlProps} from './Item';
+import {FormItem, FormControlProps, FormBaseControl} from './Item';
 import cx from 'classnames';
 import {Button} from '../../types';
+import {ActionSchema} from '../Action';
 
-export interface ButtonProps extends FormControlProps, Omit<Button, 'size'> {}
+/**
+ * 按钮控件。
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/button
+ */
+export type ButtonControlSchema = ActionSchema & FormBaseControl;
+
+export interface ButtonProps
+  extends FormControlProps,
+    Omit<Button, 'size' | 'className'> {}
 
 export class ButtonControl extends React.Component<ButtonProps, any> {
   static defaultProps: Partial<ButtonProps> = {};

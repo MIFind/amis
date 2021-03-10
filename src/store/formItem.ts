@@ -5,7 +5,9 @@ import {
   flow,
   getRoot,
   hasParent,
-  isAlive
+  isAlive,
+  getEnv,
+  Instance
 } from 'mobx-state-tree';
 import {IFormStore} from './form';
 import {str2rules, validate as doValidate} from '../utils/validations';
@@ -20,7 +22,9 @@ import {
   isObjectShallowModified,
   findTree,
   findTreeIndex,
-  spliceTree
+  spliceTree,
+  isEmpty,
+  getTreeAncestors
 } from '../utils/helper';
 import {flattenTree} from '../utils/helper';
 import {IRendererStore} from '.';
@@ -29,6 +33,9 @@ import find from 'lodash/find';
 import {SimpleMap} from '../utils/SimpleMap';
 import memoize from 'lodash/memoize';
 import {TranslateFn} from '../locale';
+import {StoreNode} from './node';
+import {dataMapping} from '../utils/tpl-builtin';
+import {getStoreById} from './manager';
 
 interface IOption {
   value?: string | number | null;
@@ -44,20 +51,21 @@ const ErrorDetail = types.model('ErrorDetail', {
   tag: ''
 });
 
-export const FormItemStore = types
-  .model('FormItemStore', {
-    identifier: types.identifier,
+export const FormItemStore = StoreNode.named('FormItemStore')
+  .props({
     isFocused: false,
     type: '',
     unique: false,
     loading: false,
     required: false,
+    tmpValue: types.frozen(),
     rules: types.optional(types.frozen(), {}),
     messages: types.optional(types.frozen(), {}),
     errorData: types.optional(types.array(ErrorDetail), []),
     name: types.string,
-    id: '', // 因为 name 可能会重名，所以加个 id 进来，如果有需要用来定位具体某一个
+    itemId: '', // 因为 name 可能会重名，所以加个 id 进来，如果有需要用来定位具体某一个
     unsetValueOnInvisible: false,
+    itemsRef: types.optional(types.array(types.string), []),
     validated: false,
     validating: false,
     multiple: false,
@@ -68,19 +76,23 @@ export const FormItemStore = types
     extractValue: false,
     options: types.optional(types.array(types.frozen()), []),
     expressionsInOptions: false,
+    selectFirst: false,
+    autoFill: types.frozen(),
+    clearValueOnHidden: false,
     selectedOptions: types.optional(types.frozen(), []),
     filteredOptions: types.optional(types.frozen(), []),
     dialogSchema: types.frozen(),
     dialogOpen: false,
-    dialogData: types.frozen()
+    dialogData: types.frozen(),
+    resetValue: types.optional(types.frozen(), '')
   })
   .views(self => {
     function getForm(): any {
-      return hasParent(self, 2) ? getParent(self, 2) : null;
+      return self.parentStore;
     }
 
     function getValue(): any {
-      return getForm() ? getForm().getValueByName(self.name) : undefined;
+      return getForm()?.getValueByName(self.name);
     }
 
     function getLastOptionValue(): any {
@@ -96,6 +108,10 @@ export const FormItemStore = types
     }
 
     return {
+      get subFormItems(): any {
+        return self.itemsRef.map(item => getStoreById(item));
+      },
+
       get form(): any {
         return getForm();
       },
@@ -105,9 +121,7 @@ export const FormItemStore = types
       },
 
       get prinstine(): any {
-        return (getParent(self, 2) as IFormStore).getPristineValueByName(
-          self.name
-        );
+        return (getForm() as IFormStore).getPristineValueByName(self.name);
       },
 
       get errors() {
@@ -139,32 +153,6 @@ export const FormItemStore = types
             ? item[self.valueField || 'value']
             : item
         );
-
-        // Array.isArray(value)
-        //   ? value.map(item =>
-        //       item && item.hasOwnProperty(self.valueField || 'value')
-        //         ? item[self.valueField || 'value']
-        //         : item
-        //     )
-        //   : typeof value === 'string'
-        //   ? value.split(self.delimiter || ',')
-        //   : [
-        //       value && value.hasOwnProperty(self.valueField || 'value')
-        //         ? value[self.valueField || 'value']
-        //         : value
-        //     ];
-
-        // // 保留原来的 label 信息，如果原始值中有 label。
-        // if (
-        //   value &&
-        //   value.hasOwnProperty(self.labelField || 'label') &&
-        //   !selected[0].hasOwnProperty(self.labelField || 'label')
-        // ) {
-        //   selected[0] = {
-        //     [self.labelField || 'label']: value[self.labelField || 'label'],
-        //     [self.valueField || 'value']: value[self.valueField || 'value']
-        //   };
-        // }
 
         const selectedOptions: Array<any> = [];
 
@@ -201,14 +189,6 @@ export const FormItemStore = types
         });
 
         return selectedOptions;
-      },
-
-      get __(): TranslateFn {
-        return isAlive(self) &&
-          getRoot(self) &&
-          (getRoot(self) as IRendererStore).storeType === 'RendererStore'
-          ? (getRoot(self) as IRendererStore).__
-          : (str: string) => str;
       }
     };
   })
@@ -230,10 +210,13 @@ export const FormItemStore = types
       joinValues,
       extractValue,
       type,
-      id
+      id,
+      selectFirst,
+      autoFill,
+      clearValueOnHidden
     }: {
-      required?: any;
-      unique?: any;
+      required?: boolean;
+      unique?: boolean;
       value?: any;
       rules?: string | {[propName: string]: any};
       messages?: {[propName: string]: string};
@@ -245,17 +228,22 @@ export const FormItemStore = types
       extractValue?: boolean;
       type?: string;
       id?: string;
+      selectFirst?: boolean;
+      autoFill?: any;
+      clearValueOnHidden?: boolean;
     }) {
       if (typeof rules === 'string') {
         rules = str2rules(rules);
       }
 
       typeof type !== 'undefined' && (self.type = type);
-      typeof id !== 'undefined' && (self.id = id);
+      typeof id !== 'undefined' && (self.itemId = id);
       typeof messages !== 'undefined' && (self.messages = messages);
       typeof required !== 'undefined' && (self.required = !!required);
       typeof unique !== 'undefined' && (self.unique = !!unique);
       typeof multiple !== 'undefined' && (self.multiple = !!multiple);
+      typeof selectFirst !== 'undefined' && (self.selectFirst = !!selectFirst);
+      typeof autoFill !== 'undefined' && (self.autoFill = autoFill);
       typeof joinValues !== 'undefined' && (self.joinValues = !!joinValues);
       typeof extractValue !== 'undefined' &&
         (self.extractValue = !!extractValue);
@@ -265,6 +253,8 @@ export const FormItemStore = types
         (self.valueField = (valueField as string) || 'value');
       typeof labelField !== 'undefined' &&
         (self.labelField = (labelField as string) || 'label');
+      typeof clearValueOnHidden !== 'undefined' &&
+        (self.clearValueOnHidden = !!clearValueOnHidden);
 
       rules = rules || {};
       rules = {
@@ -280,6 +270,7 @@ export const FormItemStore = types
 
       if (value !== void 0 && self.value === void 0) {
         form.setValueByName(self.name, value, true);
+        syncAutoFill(value, true);
       }
     }
 
@@ -297,6 +288,8 @@ export const FormItemStore = types
       } else {
         self.form.setValueByName(self.name, value, isPrintine);
       }
+
+      syncAutoFill(value, isPrintine);
     }
 
     const validate: (hook?: any) => Promise<boolean> = flow(function* validate(
@@ -368,7 +361,27 @@ export const FormItemStore = types
       }
     }
 
-    function setOptions(options: Array<object>) {
+    function getFirstAvaibleOption(options: Array<any>): any {
+      if (!Array.isArray(options)) {
+        return;
+      }
+
+      for (let option of options) {
+        if (Array.isArray(option.children)) {
+          const childFirst = getFirstAvaibleOption(option.children);
+          if (childFirst !== undefined) {
+            return childFirst;
+          }
+        } else if (option[self.valueField || 'value'] && !option.disabled) {
+          return option;
+        }
+      }
+    }
+
+    function setOptions(
+      options: Array<object>,
+      onChange?: (value: any) => void
+    ) {
       if (!Array.isArray(options)) {
         return;
       }
@@ -376,6 +389,42 @@ export const FormItemStore = types
       const originOptions = self.options.concat();
       options.length ? self.options.replace(options) : self.options.clear();
       syncOptions(originOptions);
+      let selectedOptions;
+
+      if (
+        self.selectFirst &&
+        self.filteredOptions.length &&
+        (selectedOptions = self.getSelectedOptions(self.value)) &&
+        !selectedOptions.filter(item => !item.__unmatched).length
+      ) {
+        const fistOption = getFirstAvaibleOption(self.filteredOptions);
+        if (!fistOption) {
+          return;
+        }
+
+        const list = [fistOption].map((item: any) => {
+          if (self.extractValue || self.joinValues) {
+            return item[self.valueField || 'value'];
+          }
+
+          return item;
+        });
+
+        const value =
+          self.joinValues && self.multiple
+            ? list.join(self.delimiter)
+            : self.multiple
+            ? list
+            : list[0];
+
+        if (form.inited && onChange) {
+          onChange(value);
+        } else {
+          changeValue(value, !form.inited);
+        }
+      }
+
+      syncAutoFill(self.value, !form.inited);
     }
 
     let loadCancel: Function | null = null;
@@ -399,26 +448,22 @@ export const FormItemStore = types
 
         self.loading = true;
 
-        const json: Payload = yield (getRoot(self) as IRendererStore).fetcher(
-          api,
-          data,
-          {
-            autoAppend: false,
-            cancelExecutor: (executor: Function) => (loadCancel = executor),
-            ...config
-          }
-        );
+        const json: Payload = yield getEnv(self).fetcher(api, data, {
+          autoAppend: false,
+          cancelExecutor: (executor: Function) => (loadCancel = executor),
+          ...config
+        });
         loadCancel = null;
         let result: any = null;
 
         if (!json.ok) {
           setErrorFlag !== false &&
             setError(
-              self.__('加载选项失败，原因：{{reason}}', {
-                reason: json.msg || (config && config.errorMessage)
+              self.__('Form.loadOptionsFailed', {
+                reason: json.msg ?? (config && config.errorMessage)
               })
             );
-          (getRoot(self) as IRendererStore).notify(
+          getEnv(self).notify(
             'error',
             self.errors.join(''),
             json.msgTimeout !== undefined
@@ -435,21 +480,19 @@ export const FormItemStore = types
         self.loading = false;
         return result;
       } catch (e) {
-        const root = getRoot(self) as IRendererStore;
-        if (root.storeType !== 'RendererStore') {
-          // 已经销毁了，不管这些数据了。
+        const env = getEnv(self);
+
+        if (!isAlive(self) || self.disposed) {
           return;
         }
 
         self.loading = false;
-
-        if (root.isCancel(e)) {
+        if (env.isCancel(e)) {
           return;
         }
 
         console.error(e.stack);
-        getRoot(self) &&
-          (getRoot(self) as IRendererStore).notify('error', e.message);
+        env.notify('error', e.message);
         return;
       }
     } as any);
@@ -468,8 +511,8 @@ export const FormItemStore = types
       clearValue?: any,
       onChange?: (
         value: any,
-        submitOnChange: boolean,
-        changeImmediately: boolean
+        submitOnChange?: boolean,
+        changeImmediately?: boolean
       ) => void,
       setErrorFlag?: boolean
     ) {
@@ -489,11 +532,11 @@ export const FormItemStore = types
         [];
 
       options = normalizeOptions(options as any);
-      setOptions(options);
+      setOptions(options, onChange);
 
       if (json.data && typeof (json.data as any).value !== 'undefined') {
         onChange && onChange((json.data as any).value, false, true);
-      } else if (clearValue) {
+      } else if (clearValue && !self.selectFirst) {
         self.selectedOptions.some((item: any) => item.__unmatched) &&
           onChange &&
           onChange('', false, true);
@@ -565,6 +608,12 @@ export const FormItemStore = types
 
       const form = self.form;
       const value = self.value;
+
+      // 有可能销毁了
+      if (!form) {
+        return;
+      }
+
       const selected = Array.isArray(value)
         ? value.map(item =>
             item && item.hasOwnProperty(self.valueField || 'value')
@@ -695,6 +744,10 @@ export const FormItemStore = types
     }
 
     let subStore: any;
+    function getSubStore() {
+      return subStore;
+    }
+
     function setSubStore(store: any) {
       subStore = store;
     }
@@ -731,6 +784,61 @@ export const FormItemStore = types
       }
     }
 
+    function syncAutoFill(
+      value: any = self.value,
+      isPrintine: boolean = false
+    ) {
+      if (
+        !self.multiple &&
+        self.autoFill &&
+        !isEmpty(self.autoFill) &&
+        self.options.length
+      ) {
+        const selectedOptions = self.getSelectedOptions(value);
+        if (selectedOptions.length !== 1) {
+          return;
+        }
+
+        const toSync = dataMapping(
+          self.autoFill,
+          createObject(
+            {
+              ancestors: getTreeAncestors(
+                self.filteredOptions,
+                selectedOptions[0],
+                true
+              )
+            },
+            selectedOptions[0]
+          )
+        );
+        Object.keys(toSync).forEach(key => {
+          const value = toSync[key];
+
+          if (typeof value === 'undefined' || value === '__undefined') {
+            self.form.deleteValueByName(key);
+          } else {
+            self.form.setValueByName(key, value, isPrintine);
+          }
+        });
+      }
+    }
+
+    function changeTmpValue(value: any) {
+      self.tmpValue = value;
+    }
+
+    function addSubFormItem(item: IFormItemStore) {
+      self.itemsRef.push(item.id);
+    }
+
+    function removeSubFormItem(item: IFormItemStore) {
+      const idx = self.itemsRef.findIndex(a => a === item.id);
+      if (~idx) {
+        self.itemsRef.splice(idx, 1);
+      }
+    }
+
     return {
       focus,
       blur,
@@ -746,11 +854,16 @@ export const FormItemStore = types
       syncOptions,
       setLoading,
       setSubStore,
+      getSubStore,
       reset,
       openDialog,
-      closeDialog
+      closeDialog,
+      syncAutoFill,
+      changeTmpValue,
+      addSubFormItem,
+      removeSubFormItem
     };
   });
 
-export type IFormItemStore = typeof FormItemStore.Type;
+export type IFormItemStore = Instance<typeof FormItemStore>;
 export type SFormItemStore = SnapshotIn<typeof FormItemStore>;

@@ -2,7 +2,7 @@
  * @file 所有列表选择类控件的父级，比如 Select、Radios、Checkboxes、
  * List、ButtonGroup 等等
  */
-import {Api, Schema} from '../../types';
+import {Api, PlainObject, Schema} from '../../types';
 import {isEffectiveApi, isApiOutdated, isValidApi} from '../../utils/api';
 import {isAlive} from 'mobx-state-tree';
 import {
@@ -19,7 +19,9 @@ import {
   FormControlProps,
   registerFormItem,
   FormItemBasicConfig,
-  detectProps as itemDetectProps
+  detectProps as itemDetectProps,
+  FormBaseControl,
+  FormControlSchema
 } from './Item';
 import {IFormItemStore} from '../../store/formItem';
 export type OptionsControlComponent = React.ComponentType<FormControlProps>;
@@ -37,8 +39,139 @@ import {
 } from '../../components/Select';
 import {filter} from '../../utils/tpl';
 import findIndex from 'lodash/findIndex';
+import {
+  SchemaApi,
+  SchemaExpression,
+  SchemaTokenizeableString
+} from '../../Schema';
 
 export {Option};
+
+export interface FormOptionsControl extends FormBaseControl {
+  /**
+   * 选项集合
+   */
+  options?: Array<Option> | string[] | PlainObject;
+
+  /**
+   * 可用来通过 API 拉取 options。
+   */
+  source?: SchemaApi | SchemaTokenizeableString;
+
+  /**
+   * 默认选择选项第一个值。
+   */
+  selectFirst?: boolean;
+
+  /**
+   * 用表达式来配置 source 接口初始要不要拉取
+   *
+   * @deprecated 建议用 source 接口的 sendOn
+   */
+  initFetchOn?: SchemaExpression;
+
+  /**
+   * 配置 source 接口初始拉不拉取。
+   *
+   * @deprecated 建议用 source 接口的 sendOn
+   */
+  initFetch?: boolean;
+
+  /**
+   * 是否为多选模式
+   */
+  multiple?: boolean;
+
+  /**
+   * 单选模式：当用户选中某个选项时，选项中的 value 将被作为该表单项的值提交，否则，整个选项对象都会作为该表单项的值提交。
+   * 多选模式：选中的多个选项的 `value` 会通过 `delimiter` 连接起来，否则直接将以数组的形式提交值。
+   */
+  joinValues?: boolean;
+
+  /**
+   * 分割符
+   */
+  delimiter?: string;
+
+  /**
+   * 开启后将选中的选项 value 的值封装为数组，作为当前表单项的值。
+   */
+  extractValue?: boolean;
+
+  /**
+   * 是否可清除。
+   */
+  clearable?: boolean;
+
+  /**
+   * 点清除按钮时，将表单项设置成当前配置的值。
+   *
+   * @default ''
+   */
+  resetValue?: string;
+
+  /**
+   * 延时加载的 API，当选项中有 defer: true 的选项时，点开会通过此接口扩充。
+   */
+  deferApi?: SchemaApi;
+
+  /**
+   * 添加时调用的接口
+   */
+  addApi?: SchemaApi;
+
+  /**
+   * 新增时的表单项。
+   */
+  addControls?: Array<FormControlSchema>;
+
+  /**
+   * 是否可以新增
+   */
+  creatable?: boolean;
+
+  /**
+   * 新增文字
+   */
+  createBtnLabel?: string;
+
+  /**
+   * 是否可以编辑
+   */
+  editable?: boolean;
+
+  /**
+   * 编辑时调用的 API
+   */
+  editApi?: SchemaApi;
+
+  /**
+   * 选项修改的表单项
+   */
+  editControls?: Array<FormControlSchema>;
+
+  /**
+   * 是否可删除
+   */
+  removable?: boolean;
+
+  /**
+   * 选项删除 API
+   */
+  deleteApi?: SchemaApi;
+
+  /**
+   * 选项删除提示文字。
+   */
+  deleteConfirmText?: string;
+
+  /**
+   * 自动填充，当选项被选择的时候，将选项中的其他值同步设置到表单内。
+   */
+  autoFill?: {
+    [propName: string]: SchemaTokenizeableString;
+  };
+}
 
 export interface OptionsBasicConfig extends FormItemBasicConfig {
   autoLoadOptionsFromSource?: boolean;
@@ -49,9 +182,13 @@ export interface OptionsConfig extends OptionsBasicConfig {
 }
 
 // 下发给注册进来的组件的属性。
-export interface OptionsControlProps extends FormControlProps, OptionProps {
-  source?: Api;
-  name?: string;
+export interface OptionsControlProps
+  extends FormControlProps,
+    Omit<
+      FormOptionsControl,
+      'type' | 'className' | 'descriptionClassName' | 'inputClassName'
+    > {
+  options: Array<Option>;
   onToggle: (
     option: Option,
     submitOnChange?: boolean,
@@ -63,22 +200,19 @@ export interface OptionsControlProps extends FormControlProps, OptionProps {
   setLoading: (value: boolean) => void;
   reloadOptions: (setError?: boolean) => void;
   deferLoad: (option: Option) => void;
-  creatable?: boolean;
   onAdd?: (
     idx?: number | Array<number>,
     value?: any,
     skipForm?: boolean
   ) => void;
-  addControls?: Array<any>;
-  editable?: boolean;
-  editControls?: Array<any>;
   onEdit?: (value: Option, origin?: Option, skipForm?: boolean) => void;
-  removable?: boolean;
   onDelete?: (value: Option) => void;
 }
 
 // 自己接收的属性。
-export interface OptionsProps extends FormControlProps, OptionProps {
+export interface OptionsProps
+  extends FormControlProps,
+    Omit<OptionProps, 'className'> {
   source?: Api;
   deferApi?: Api;
   creatable?: boolean;
@@ -118,7 +252,7 @@ export function registerOptionsControl(config: OptionsConfig) {
       joinValues: true,
       extractValue: false,
       multiple: false,
-      placeholder: '请选择',
+      placeholder: 'Select.placeholder',
       resetValue: '',
       deleteConfirmText: '确定要删除？',
       ...Control.defaultProps
@@ -146,11 +280,12 @@ export function registerOptionsControl(config: OptionsConfig) {
         formInited,
         valueField,
         options,
-        value
+        value,
+        onChange
       } = this.props;
 
       if (formItem) {
-        formItem.setOptions(normalizeOptions(options));
+        formItem.setOptions(normalizeOptions(options), onChange);
 
         this.reaction = reaction(
           () => JSON.stringify([formItem.loading, formItem.filteredOptions]),
@@ -214,7 +349,10 @@ export function registerOptionsControl(config: OptionsConfig) {
       }
 
       if (prevProps.options !== props.options && formItem) {
-        formItem.setOptions(normalizeOptions(props.options || []));
+        formItem.setOptions(
+          normalizeOptions(props.options || []),
+          props.onChange
+        );
         this.normalizeValue();
       } else if (
         config.autoLoadOptionsFromSource !== false &&
@@ -233,10 +371,14 @@ export function registerOptionsControl(config: OptionsConfig) {
             props.data,
             '| raw'
           );
-          prevOptions !== options &&
-            formItem.setOptions(normalizeOptions(options || []));
 
-          this.normalizeValue();
+          if (prevOptions !== options) {
+            formItem.setOptions(
+              normalizeOptions(options || []),
+              props.onChange
+            );
+            this.normalizeValue();
+          }
         } else if (
           isEffectiveApi(props.source, props.data) &&
           isApiOutdated(
@@ -324,61 +466,16 @@ export function registerOptionsControl(config: OptionsConfig) {
       submitOnChange?: boolean,
       changeImmediately?: boolean
     ) {
-      const {
-        onChange,
-        joinValues,
-        extractValue,
-        valueField,
-        delimiter,
-        clearable,
-        resetValue,
-        multiple,
-        formItem,
-        value
-      } = this.props;
+      const {onChange, formItem, value} = this.props;
 
       if (!formItem) {
         return;
       }
 
-      let valueArray = formItem.getSelectedOptions(value).concat();
-      const idx = findIndex(
-        valueArray,
-        optionValueCompare(option[valueField || 'value'], valueField || 'value')
+      let newValue: string | Array<Option> | Option = this.toggleValue(
+        option,
+        value
       );
-      let newValue: string | Array<Option> | Option = '';
-
-      if (multiple) {
-        if (~idx) {
-          valueArray.splice(idx, 1);
-        } else {
-          valueArray.push(option);
-        }
-
-        newValue = valueArray;
-
-        if (joinValues) {
-          newValue = (newValue as Array<any>)
-            .map(item => item[valueField || 'value'])
-            .join(delimiter);
-        } else if (extractValue) {
-          newValue = (newValue as Array<any>).map(
-            item => item[valueField || 'value']
-          );
-        }
-      } else {
-        if (~idx && clearable) {
-          valueArray.splice(idx, 1);
-        } else {
-          valueArray = [option];
-        }
-
-        newValue = valueArray[0] || resetValue;
-
-        if ((joinValues || extractValue) && newValue) {
-          newValue = (newValue as any)[valueField || 'value'];
-        }
-      }
 
       onChange && onChange(newValue, submitOnChange, changeImmediately);
     }
@@ -432,21 +529,87 @@ export function registerOptionsControl(config: OptionsConfig) {
       onChange && onChange(newValue);
     }
 
+    toggleValue(option: Option, originValue?: any) {
+      const {
+        joinValues,
+        extractValue,
+        valueField,
+        delimiter,
+        clearable,
+        resetValue,
+        multiple,
+        formItem
+      } = this.props;
+
+      let valueArray =
+        originValue !== undefined
+          ? formItem!.getSelectedOptions(originValue).concat()
+          : [];
+
+      const idx = findIndex(
+        valueArray,
+        optionValueCompare(option[valueField || 'value'], valueField || 'value')
+      );
+      let newValue: string | Array<Option> | Option = '';
+
+      if (multiple) {
+        if (~idx) {
+          valueArray.splice(idx, 1);
+        } else {
+          valueArray.push(option);
+        }
+
+        newValue = valueArray;
+
+        if (joinValues) {
+          newValue = (newValue as Array<any>)
+            .map(item => item[valueField || 'value'])
+            .join(delimiter);
+        } else if (extractValue) {
+          newValue = (newValue as Array<any>).map(
+            item => item[valueField || 'value']
+          );
+        }
+      } else {
+        if (~idx && clearable) {
+          valueArray.splice(idx, 1);
+        } else {
+          valueArray = [option];
+        }
+
+        newValue = valueArray[0] || resetValue;
+
+        if ((joinValues || extractValue) && newValue) {
+          newValue = (newValue as any)[valueField || 'value'];
+        }
+      }
+
+      return newValue;
+    }
+
     // 当有 action 触发，如果指定了 reload 目标组件，有可能会来到这里面来
     @autobind
     reload() {
-      this.reloadOptions();
+      return this.reloadOptions();
     }
 
     @autobind
-    reloadOptions(setError?: boolean) {
-      const {source, formItem, data, onChange} = this.props;
+    reloadOptions(setError?: boolean, isInit = false) {
+      const {
+        source,
+        formItem,
+        data,
+        onChange,
+        setPrinstineValue,
+        selectFirst
+      } = this.props;
 
       if (formItem && isPureVariable(source as string)) {
         formItem.setOptions(
           normalizeOptions(
             resolveVariableAndFilter(source as string, data, '| raw') || []
-          )
+          ),
+          onChange
         );
         return;
       } else if (!formItem || !isEffectiveApi(source, data)) {
@@ -458,7 +621,7 @@ export function registerOptionsControl(config: OptionsConfig) {
         data,
         undefined,
         false,
-        onChange,
+        isInit ? setPrinstineValue : onChange,
         setError
       );
     }
@@ -486,7 +649,7 @@ export function registerOptionsControl(config: OptionsConfig) {
 
     @autobind
     async initOptions(data: any) {
-      await this.reload();
+      await this.reloadOptions(false, true);
       const {formItem, name} = this.props;
       if (!formItem) {
         return;
@@ -505,7 +668,8 @@ export function registerOptionsControl(config: OptionsConfig) {
       const formItem = this.props.formItem as IFormItemStore;
       formItem &&
         formItem.setOptions(
-          skipNormalize ? options : normalizeOptions(options || [])
+          skipNormalize ? options : normalizeOptions(options || []),
+          this.props.onChange
         );
     }
 
@@ -524,7 +688,7 @@ export function registerOptionsControl(config: OptionsConfig) {
     @autobind
     async handleOptionAdd(
       idx: number | Array<number> = -1,
-      value: any,
+      value?: any,
       skipForm: boolean = false
     ) {
       let {
@@ -555,15 +719,16 @@ export function registerOptionsControl(config: OptionsConfig) {
             type: 'text',
             name: labelField || 'label',
             label: false,
-            placeholder: __('请输入名称')
+            placeholder: __('Options.addPlaceholder')
           }
         ];
       }
+
       const ctx = createObject(
         data,
         Array.isArray(idx)
           ? {
-              parent: getTree(model.options, idx.slice(0, idx.length - 1)),
+              parent: getTree(model.options, idx.slice(0, -1)),
               ...value
             }
           : value
@@ -631,7 +796,7 @@ export function registerOptionsControl(config: OptionsConfig) {
             ? options.splice(idx, 0, {...result})
             : options.push({...result});
         }
-        model.setOptions(options);
+        model.setOptions(options, this.props.onChange);
       }
     }
 
@@ -665,7 +830,7 @@ export function registerOptionsControl(config: OptionsConfig) {
             type: 'text',
             name: labelField || 'label',
             label: false,
-            placeholder: __('请输入名称')
+            placeholder: __('Options.addPlaceholder')
           }
         ];
       }
@@ -675,8 +840,8 @@ export function registerOptionsControl(config: OptionsConfig) {
         : await onOpenDialog(
             {
               type: 'dialog',
-              title: __('编辑{{label}}', {
-                label: optionLabel || '选项'
+              title: __('Options.editLabel', {
+                label: optionLabel || __('Options.label')
               }),
               body: {
                 type: 'form',
@@ -699,7 +864,7 @@ export function registerOptionsControl(config: OptionsConfig) {
           );
 
           if (!payload.ok) {
-            env.notify('error', payload.msg || __('保存失败，请仔细检查'));
+            env.notify('error', payload.msg || __('saveFailed'));
             result = null;
           } else {
             result = payload.data || result;
@@ -726,7 +891,8 @@ export function registerOptionsControl(config: OptionsConfig) {
             spliceTree(model.options, indexes, 1, {
               ...origin,
               ...result
-            })
+            }),
+            this.props.onChange
           );
         }
       }
@@ -763,7 +929,7 @@ export function registerOptionsControl(config: OptionsConfig) {
       // 通过 deleteApi 删除。
       try {
         if (!deleteApi) {
-          throw new Error(__('请配置 deleteApi'));
+          throw new Error(__('Options.deleteAPI'));
         }
 
         const result = await env.fetcher(deleteApi!, ctx, {
@@ -771,7 +937,7 @@ export function registerOptionsControl(config: OptionsConfig) {
         });
 
         if (!result.ok) {
-          env.notify('error', result.msg || __('删除失败，请重试'));
+          env.notify('error', result.msg || __('deleteFailed'));
         } else if (source) {
           this.reload();
         } else {
@@ -783,7 +949,7 @@ export function registerOptionsControl(config: OptionsConfig) {
 
           if (~idx) {
             options.splice(idx, 1);
-            model.setOptions(options);
+            model.setOptions(options, this.props.onChange);
           }
         }
       } catch (e) {
@@ -862,10 +1028,7 @@ export function highlight(
   }
 
   text = String(text);
-  const reg = new RegExp(
-    input.replace(/([\$\^\*\+\-\?\.\(\)\|\[\]\\])/g, '\\$1'),
-    'i'
-  );
+  const reg = new RegExp(input.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&'), 'i');
   if (!reg.test(text)) {
     return text;
   }

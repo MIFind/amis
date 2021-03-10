@@ -5,7 +5,7 @@
  */
 
 import NotFound from './404';
-import {default as Alert, alert, confirm} from './Alert';
+import {default as Alert, alert, confirm, prompt} from './Alert';
 import {default as ContextMenu, openContextMenus} from './ContextMenu';
 import AsideNav from './AsideNav';
 import Button from './Button';
@@ -30,6 +30,7 @@ import Range from './Range';
 import Rating from './Rating';
 // import RichText from './RichText';
 import Select from './Select';
+import SparkLine from './SparkLine';
 import Spinner from './Spinner';
 import Switch from './Switch';
 import Textarea from './Textarea';
@@ -50,15 +51,19 @@ import InputBox from './InputBox';
 import ListRadios from './ListRadios';
 import TreeRadios from './TreeRadios';
 import ListGroup from './ListGroup';
+import NumberInput from './NumberInput';
+import ArrayInput from './ArrayInput';
+import SearchBox from './SearchBox';
 
 export {
   NotFound,
   Alert as AlertComponent,
   alert,
+  confirm,
+  prompt,
   ContextMenu,
   openContextMenus,
   Alert2,
-  confirm,
   AsideNav,
   Button,
   Checkbox,
@@ -83,6 +88,7 @@ export {
   Rating,
   // RichText,
   Select,
+  SparkLine,
   Spinner,
   Switch,
   Textarea,
@@ -101,6 +107,9 @@ export {
   ResultBox,
   InputBox,
   ListRadios,
+  SearchBox,
   TreeRadios,
-  ListGroup
+  ListGroup,
+  NumberInput,
+  ArrayInput
 };

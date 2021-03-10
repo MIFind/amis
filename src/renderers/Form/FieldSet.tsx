@@ -1,21 +1,74 @@
 import React from 'react';
+import {FormSchemaHorizontal} from '.';
 import {Renderer, RendererProps} from '../../factory';
-import Collapse from '../Collapse';
-import cx from 'classnames';
+import {SchemaCollection, SchemaTpl} from '../../Schema';
+import Collapse, {CollapseSchema} from '../Collapse';
+import {FormBaseControl, FormControlSchema} from './Item';
 
-export interface FieldSetProps extends RendererProps {
-  title?: string;
-  collapsed?: boolean;
-  mode?: 'normal' | 'inline' | 'horizontal' | 'row';
-  size?: 'xs' | 'sm' | 'md' | 'lg' | 'base';
-  formClassName?: string;
+/**
+ * FieldSet 表单项集合
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/fieldset
+ */
+export interface FieldSetControlSchema
+  extends Omit<FormBaseControl, 'size'>,
+    Omit<CollapseSchema, 'type' | 'body'> {
+  /**
+   * 指定为表单项集合
+   */
+  type: 'fieldset' | 'fieldSet';
+
+  /**
+   * 标题展示位置
+   */
+  titlePosition: 'top' | 'bottom';
+
+  /**
+   * 表单项集合
+   */
+  controls?: Array<FormControlSchema>;
+
+  /**
+   * 是否可折叠
+   */
   collapsable?: boolean;
-  horizontal: {
-    left: string;
-    right: string;
-    offset: string;
-  };
+
+  /**
+   * 默认是否折叠
+   */
+  collapsed?: boolean;
+
+  /**
+   * 内容区域
+   */
+  body?: SchemaCollection;
+
+  /**
+   * 标题
+   */
+  title?: SchemaTpl;
+
+  /**
+   * 收起的标题
+   */
+  collapseTitle?: SchemaTpl;
+
+  /**
+   * 点开时才加载内容
+   */
+  mountOnEnter?: boolean;
+
+  /**
+   * 卡片隐藏就销毁内容。
+   */
+  unmountOnExit?: boolean;
 }
+
+export interface FieldSetProps
+  extends RendererProps,
+    Omit<
+      FieldSetControlSchema,
+      'type' | 'className' | 'descriptionClassName' | 'inputClassName'
+    > {}
 
 export default class FieldSetControl extends React.Component<
   FieldSetProps,
@@ -27,6 +80,7 @@ export default class FieldSetControl extends React.Component<
   }
 
   static defaultProps = {
+    titlePosition: 'top',
     headingClassName: '',
     collapsable: false
   };
@@ -48,7 +102,7 @@ export default class FieldSetControl extends React.Component<
     } = this.props;
 
     if (!controls) {
-      return render('body', body) as JSX.Element;
+      return render('body', body!) as JSX.Element;
     }
 
     let props: any = {
@@ -67,25 +121,22 @@ export default class FieldSetControl extends React.Component<
           formClassName
         )}
       >
-        {renderFormItems(
-          {controls},
-          ($path as string).replace(/^.*form\//, ''),
-          props
-        )}
+        {renderFormItems({controls}, 'controls', props)}
       </div>
     );
   }
 
   render() {
-    const {controls, className, mode, ...rest} = this.props;
+    const {controls, className, mode, body, ...rest} = this.props;
 
     return (
       <Collapse
         {...rest}
+        body={body!}
         className={className}
         children={this.renderBody}
         wrapperComponent="fieldset"
-        headingComponent="legend"
+        headingComponent={rest.titlePosition === 'bottom' ? 'div' : 'legend'}
       />
     );
   }

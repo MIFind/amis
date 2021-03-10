@@ -1,13 +1,43 @@
 import React from 'react';
 import cx from 'classnames';
-import {OptionsControl, OptionsControlProps, Option} from './Options';
+import {
+  OptionsControl,
+  OptionsControlProps,
+  Option,
+  FormOptionsControl
+} from './Options';
 import Select from '../../components/Select';
 import find from 'lodash/find';
 import debouce from 'lodash/debounce';
 import {Api} from '../../types';
 import {isEffectiveApi} from '../../utils/api';
-import {isEmpty, createObject} from '../../utils/helper';
+import {isEmpty, createObject, autobind} from '../../utils/helper';
 import {dataMapping} from '../../utils/tpl-builtin';
+import {SchemaApi} from '../../Schema';
+
+/**
+ * Select 下拉选择框。
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/select
+ */
+export interface SelectControlSchema extends FormOptionsControl {
+  type: 'select' | 'multi-select';
+
+  /**
+   * 自动完成 API，当输入部分文字的时候，会将这些文字通过 ${term} 可以取到，发送给接口。
+   * 接口可以返回匹配到的选项，帮助用户输入。
+   */
+  autoComplete?: SchemaApi;
+
+  /**
+   * 是否可以搜索值
+   */
+  searchable?: boolean;
+
+  /**
+   * 可以自定义菜单展示。
+   */
+  menuTpl?: string;
+}
 
 export interface SelectProps extends OptionsControlProps {
   autoComplete?: Api;
@@ -18,16 +48,18 @@ export interface SelectProps extends OptionsControlProps {
 export default class SelectControl extends React.Component<SelectProps, any> {
   static defaultProps: Partial<SelectProps> = {
     clearable: false,
-    searchable: false
+    searchable: false,
+    multiple: false
   };
 
   input: any;
   unHook: Function;
+  lazyloadRemote: Function;
   constructor(props: SelectProps) {
     super(props);
 
     this.changeValue = this.changeValue.bind(this);
-    this.loadRemote = debouce(this.loadRemote.bind(this), 250, {
+    this.lazyloadRemote = debouce(this.loadRemote.bind(this), 250, {
       trailing: true,
       leading: false
     });
@@ -56,9 +88,7 @@ export default class SelectControl extends React.Component<SelectProps, any> {
       valueField,
       onChange,
       setOptions,
-      options,
-      autoFill,
-      onBulkChange
+      options
     } = this.props;
 
     let newValue: string | Option | Array<Option> | void = value;
@@ -102,12 +132,6 @@ export default class SelectControl extends React.Component<SelectProps, any> {
     // 不设置没法回显
     additonalOptions.length && setOptions(options.concat(additonalOptions));
 
-    const sendTo =
-      !multiple &&
-      autoFill &&
-      !isEmpty(autoFill) &&
-      dataMapping(autoFill, value as Option);
-    sendTo && onBulkChange(sendTo);
     onChange(newValue);
   }
 
@@ -176,6 +200,15 @@ export default class SelectControl extends React.Component<SelectProps, any> {
     return combinedOptions;
   }
 
+  @autobind
+  renderMenu(option: Option, state: any) {
+    const {menuTpl, render, data} = this.props;
+
+    return render(`menu/${state.index}`, menuTpl, {
+      data: createObject(createObject(data, state), option)
+    });
+  }
+
   reload() {
     const reload = this.props.reloadOptions;
     reload && reload();
@@ -200,6 +233,7 @@ export default class SelectControl extends React.Component<SelectProps, any> {
       inline,
       noResultsText,
       render,
+      menuTpl,
       ...rest
     } = this.props;
 
@@ -217,13 +251,14 @@ export default class SelectControl extends React.Component<SelectProps, any> {
           value={selectedOptions}
           options={options}
           loadOptions={
-            isEffectiveApi(autoComplete) ? this.loadRemote : undefined
+            isEffectiveApi(autoComplete) ? this.lazyloadRemote : undefined
           }
           creatable={creatable}
           searchable={searchable || !!autoComplete}
           onChange={this.changeValue}
           loading={loading}
           noResultsText={noResultsText}
+          renderMenu={menuTpl ? this.renderMenu : undefined}
         />
       </div>
     );

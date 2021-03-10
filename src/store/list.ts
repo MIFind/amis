@@ -4,12 +4,19 @@ import {
   SnapshotIn,
   flow,
   getEnv,
-  getRoot
+  getRoot,
+  Instance
 } from 'mobx-state-tree';
 import {iRendererStore} from './iRenderer';
 import isEqual from 'lodash/isEqual';
 import find from 'lodash/find';
-import {createObject, isObject, guid, immutableExtends} from '../utils/helper';
+import {
+  createObject,
+  isObject,
+  guid,
+  immutableExtends,
+  extendObject
+} from '../utils/helper';
 import {evalExpression} from '../utils/tpl';
 
 export const Item = types
@@ -41,7 +48,7 @@ export const Item = types
 
     get locals(): any {
       return createObject(
-        createObject((getParent(self, 2) as IListStore).data, {
+        extendObject((getParent(self, 2) as IListStore).data, {
           index: self.index
         }),
         self.data
@@ -78,7 +85,7 @@ export const Item = types
     }
   }));
 
-export type IItem = typeof Item.Type;
+export type IItem = Instance<typeof Item>;
 export type SItem = SnapshotIn<typeof Item>;
 
 export const ListStore = iRendererStore
@@ -292,5 +299,5 @@ export const ListStore = iRendererStore
     };
   });
 
-export type IListStore = typeof ListStore.Type;
+export type IListStore = Instance<typeof ListStore>;
 export type SListStore = SnapshotIn<typeof ListStore>;

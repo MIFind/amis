@@ -37,7 +37,7 @@ export class BaseCheckboxes<
   S = any
 > extends React.Component<T, S> {
   static defaultProps = {
-    placeholder: '暂无选项',
+    placeholder: 'placeholder.noOption',
     itemRender: (option: Option) => <span>{option.label}</span>
   };
 
@@ -63,9 +63,9 @@ export class BaseCheckboxes<
   }
 
   toggleOption(option: Option) {
-    const {value, onChange, option2value, options} = this.props;
+    const {value, onChange, option2value, options, disabled} = this.props;
 
-    if (option.disabled) {
+    if (disabled || option.disabled) {
       return;
     }
 

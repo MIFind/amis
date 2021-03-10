@@ -1,10 +1,69 @@
 import React from 'react';
-import {FormItem, FormControlProps} from './Item';
+import {FormItem, FormControlProps, FormBaseControl} from './Item';
 import cx from 'classnames';
 import omit from 'lodash/omit';
 import pick from 'lodash/pick';
 import {createObject} from '../../utils/helper';
 import {Icon} from '../../components/icons';
+import {SchemaClassName} from '../../Schema';
+import {FormSchema} from '.';
+
+/**
+ * SubForm 子表单
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/subform
+ */
+export interface SubFormControlSchema extends FormBaseControl {
+  /**
+   * 指定为 SubForm 子表单
+   */
+  type: 'form';
+
+  /**
+   * 占位符
+   */
+  placeholder?: string;
+
+  /**
+   * 是否多选
+   */
+  multiple?: boolean;
+
+  /**
+   * 最少个数
+   */
+  minLength?: number;
+
+  /**
+   * 最多个数
+   */
+  maxLength?: number;
+
+  /**
+   * 当值中存在这个字段，则按钮名称将使用此字段的值来展示。
+   */
+  labelField?: string;
+
+  /**
+   * 按钮默认名称
+   * @default 设置
+   */
+  btnLabel?: string;
+
+  /**
+   * 新增按钮 CSS 类名
+   */
+  addButtonClassName?: SchemaClassName;
+
+  /**
+   * 修改按钮 CSS 类名
+   */
+  editButtonClassName?: SchemaClassName;
+
+  /**
+   * 子表单详情
+   */
+  form?: Omit<FormSchema, 'type'>;
+}
 
 export interface SubFormProps extends FormControlProps {
   placeholder?: string;
@@ -41,7 +100,7 @@ export default class SubFormControl extends React.PureComponent<
     addButtonClassName: '',
     editButtonClassName: '',
     labelField: 'label',
-    btnLabel: '设置'
+    btnLabel: 'SubForm.button'
   };
 
   state: SubFormState = {
@@ -171,7 +230,7 @@ export default class SubFormControl extends React.PureComponent<
                 key={key}
               >
                 <span
-                  data-tooltip={__('删除')}
+                  data-tooltip={__('delete')}
                   data-position="bottom"
                   className={`${ns}Select-valueIcon`}
                   onClick={this.removeItem.bind(this, key)}
@@ -181,7 +240,7 @@ export default class SubFormControl extends React.PureComponent<
                 <span
                   onClick={this.open.bind(this, key)}
                   className={`${ns}SubForm-valueLabel`}
-                  data-tooltip={__('编辑详情')}
+                  data-tooltip={__('SubForm.editDetail')}
                   data-position="bottom"
                 >
                   {(value &&
@@ -209,10 +268,10 @@ export default class SubFormControl extends React.PureComponent<
         onClick={this.addItem}
         className={cx(`${ns}Button ${ns}SubForm-addBtn`, addButtonClassName)}
         disabled={disabled}
-        data-tooltip={__('新增一条数据')}
+        data-tooltip={__('Combo.add')}
       >
         <Icon icon="plus" className="icon" />
-        <span>{__('新增')}</span>
+        <span>{__('Combo.add')}</span>
       </button>
     ];
   }
@@ -241,7 +300,7 @@ export default class SubFormControl extends React.PureComponent<
             btnClassName
           )}
           onClick={this.open.bind(this, 0)}
-          data-tooltip={__('编辑详情')}
+          data-tooltip={__('SubForm.editDetail')}
           data-position="bottom"
         >
           <span className={`${ns}SubForm-valueLabel`}>

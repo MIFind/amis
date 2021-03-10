@@ -26,23 +26,25 @@ export interface ScopedComponentType extends React.Component<RendererProps> {
     query?: RendererData | null,
     ctx?: RendererData
   ) => void;
+  context: any;
 }
 
 export interface IScopedContext {
-  parent?: AlisIScopedContext;
+  parent?: AliasIScopedContext;
   registerComponent: (component: ScopedComponentType) => void;
   unRegisterComponent: (component: ScopedComponentType) => void;
-  getComponentByName: (name: string) => ScopedComponentType | void;
+  getComponentByName: (name: string) => ScopedComponentType;
   getComponents: () => Array<ScopedComponentType>;
   reload: (target: string, ctx: RendererData) => void;
   send: (target: string, ctx: RendererData) => void;
+  close: (target: string) => void;
 }
-type AlisIScopedContext = IScopedContext;
+type AliasIScopedContext = IScopedContext;
 export const ScopedContext = React.createContext(createScopedTools(''));
 
 function createScopedTools(
   path?: string,
-  parent?: AlisIScopedContext,
+  parent?: AliasIScopedContext,
   env?: RendererEnv
 ): IScopedContext {
   const components: Array<ScopedComponentType> = [];
@@ -50,7 +52,7 @@ function createScopedTools(
   return {
     parent,
     registerComponent(component: ScopedComponentType) {
-      // 不要把自己注册在自己的 Scoped 上，自己的 Scoped 是给孩子们注册的。
+      // 不要把自己注册在自己的 Scoped 上，自己的 Scoped 是给子节点们注册的。
       if (component.props.$path === path && parent) {
         return parent.registerComponent(component);
       }
@@ -103,10 +105,6 @@ function createScopedTools(
     reload(target: string, ctx: any) {
       const scoped = this;
 
-      if (target === 'window') {
-        return location.reload();
-      }
-
       let targets =
         typeof target === 'string' ? target.split(/\s*,\s*/) : target;
       targets.forEach(name => {
@@ -126,8 +124,19 @@ function createScopedTools(
           name = name.substring(0, idx);
         }
 
-        const component = scoped.getComponentByName(name);
-        component && component.reload && component.reload(subPath, query, ctx);
+        if (name === 'window') {
+          if (query) {
+            const link = location.pathname + '?' + qsstringify(query);
+            env ? env.updateLocation(link, true) : location.replace(link);
+          } else {
+            location.reload();
+          }
+        } else {
+          const component = scoped.getComponentByName(name);
+          component &&
+            component.reload &&
+            component.reload(subPath, query, ctx);
+        }
       });
     },
 
@@ -156,11 +165,42 @@ function createScopedTools(
             ...values
           };
           const link = location.pathname + '?' + qsstringify(query);
-          env.updateLocation(link);
+          env.updateLocation(link, true);
         }
       });
+    },
+
+    /**
+     * 主要是用来关闭指定弹框的
+     *
+     * @param target 目标 name
+     */
+    close(target: string | boolean) {
+      const scoped = this;
+
+      if (typeof target === 'string') {
+        // 过滤已经关掉的，当用户 close 配置多个弹框 name 时会出现这种情况
+        target
+          .split(/\s*,\s*/)
+          .map(name => scoped.getComponentByName(name))
+          .filter(component => component && component.props.show)
+          .forEach(closeDialog);
+      }
     }
   };
+}
+
+function closeDialog(component: ScopedComponentType) {
+  (component.context as IScopedContext)
+    .getComponents()
+    .filter(
+      item =>
+        item &&
+        (item.props.type === 'dialog' || item.props.type === 'drawer') &&
+        item.props.show
+    )
+    .forEach(closeDialog);
+  component.props.onClose && component.props.onClose();
 }
 
 export function HocScoped<
@@ -182,8 +222,9 @@ export function HocScoped<
       scopeRef?: (ref: any) => void;
     }
   > {
-    static displayName = `Scoped(${ComposedComponent.displayName ||
-      ComposedComponent.name})`;
+    static displayName = `Scoped(${
+      ComposedComponent.displayName || ComposedComponent.name
+    })`;
     static contextType = ScopedContext;
     static ComposedComponent = ComposedComponent;
     ref: any;
@@ -218,7 +259,12 @@ export function HocScoped<
 
       return (
         <ScopedContext.Provider value={this.scoped}>
-          <ComposedComponent {...rest as any /* todo */} ref={this.childRef} />
+          <ComposedComponent
+            {
+              ...(rest as any) /* todo */
+            }
+            ref={this.childRef}
+          />
         </ScopedContext.Provider>
       );
     }

@@ -13,6 +13,9 @@ import {ListItemRenderer} from './renderers/List';
 import {ButtonGroupControlRenderer} from './renderers/Form/ButtonGroup';
 import {getLevelFromClassName} from './utils/helper';
 import {ServiceRenderer} from './renderers/Form/Service';
+import {FileControlRenderer} from './renderers/Form/File';
+import {ImageControlRenderer} from './renderers/Form/Image';
+import {RichTextControlRenderer} from './renderers/Form/RichText';
 
 // 兼容老的用法，老用法 label 用在 checkbox 的右侧内容，新用法用 option 来代替。
 addSchemaFilter(function CheckboxPropsFilter(schema: Schema, renderer) {
@@ -225,7 +228,7 @@ function convertArray2Hbox(arr: Array<any>): any {
 }
 
 // CRUD/List  和 CRUD/Card 的 body 中的数组用法转成 hbox
-addSchemaFilter(function(schema: Schema, renderer) {
+addSchemaFilter(function (schema: Schema, renderer) {
   if (
     renderer.component !== CardRenderer &&
     renderer.component !== ListItemRenderer
@@ -255,7 +258,7 @@ addSchemaFilter(function(schema: Schema, renderer) {
 });
 
 // button group 的 btnClassName 和 btnActiveClassName 改成 btnLevel 和 btnActiveLevel 了
-addSchemaFilter(function(scheam: Schema, renderer) {
+addSchemaFilter(function (scheam: Schema, renderer) {
   if (renderer.component !== ButtonGroupControlRenderer) {
     return scheam;
   }
@@ -275,7 +278,7 @@ addSchemaFilter(function(scheam: Schema, renderer) {
 });
 
 // FieldSet  className 定制样式方式改成 size 来配置
-addSchemaFilter(function(scheam: Schema, renderer) {
+addSchemaFilter(function (scheam: Schema, renderer) {
   if (renderer.component !== FieldSetRenderer) {
     return scheam;
   }
@@ -302,7 +305,7 @@ addSchemaFilter(function(scheam: Schema, renderer) {
 });
 
 // FieldSet  className 定制样式方式改成 size 来配置
-addSchemaFilter(function(scheam: Schema, renderer) {
+addSchemaFilter(function (scheam: Schema, renderer) {
   if (renderer.component !== ServiceRenderer) {
     return scheam;
   }
@@ -313,6 +316,35 @@ addSchemaFilter(function(scheam: Schema, renderer) {
       controls: scheam.body.controls
     };
     delete scheam.body;
+  }
+
+  return scheam;
+});
+
+// 原 reciever 错别字改为 receiver
+addSchemaFilter(function (scheam: Schema, renderer) {
+  if (
+    renderer.component !== FileControlRenderer &&
+    renderer.component !== ImageControlRenderer &&
+    renderer.component !== RichTextControlRenderer
+  ) {
+    return scheam;
+  }
+
+  if (scheam.reciever) {
+    scheam = {
+      ...scheam,
+      receiver: scheam.reciever
+    };
+    delete scheam.reciever;
+  }
+
+  if (scheam.videoReciever) {
+    scheam = {
+      ...scheam,
+      videoReceiver: scheam.reciever
+    };
+    delete scheam.reciever;
   }
 
   return scheam;

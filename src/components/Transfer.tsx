@@ -79,8 +79,8 @@ export interface TransferState {
 
 export class Transfer extends React.Component<TransferProps, TransferState> {
   static defaultProps = {
-    selectTitle: '请选择',
-    resultTitle: '当前选择',
+    selectTitle: 'Select.placeholder',
+    resultTitle: 'Transfer.selectd',
     itemRender: (option: Option) => <span>{option.label}</span>
   };
 
@@ -130,17 +130,29 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
   }
 
   @autobind
+  handleSearchKeyDown(e: React.KeyboardEvent<any>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    }
+  }
+
+  @autobind
   handleSearch(text: string) {
-    this.setState(
-      {
-        inputValue: text
-      },
-      () => {
-        // 如果有取消搜索，先取消掉。
-        this.cancelSearch && this.cancelSearch();
-        this.lazySearch(text);
-      }
-    );
+    // text 有值的时候，走搜索否则直接走 handleSeachCancel ，等同于右侧的 clear 按钮
+    if (text) {
+      this.setState(
+        {
+          inputValue: text
+        },
+        () => {
+          // 如果有取消搜索，先取消掉。
+          this.cancelSearch && this.cancelSearch();
+          this.lazySearch(text);
+        }
+      );
+    } else {
+      this.handleSeachCancel();
+    }
   }
 
   @autobind
@@ -226,7 +238,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
                 disabled || !options.length ? 'is-disabled' : ''
               )}
             >
-              {__('全选')}
+              {__('Select.placeholder')}
             </a>
           ) : null}
         </div>
@@ -236,8 +248,9 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
             <InputBox
               value={this.state.inputValue}
               onChange={this.handleSearch}
-              placeholder={__('请输入关键字')}
+              placeholder={__('Transfer.searchKeyword')}
               clearable={false}
+              onKeyDown={this.handleSearchKeyDown}
             >
               {this.state.searchResult !== null ? (
                 <a onClick={this.handleSeachCancel}>
@@ -265,6 +278,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
       searchResultColumns,
       classnames: cx,
       value,
+      disabled,
       onChange,
       option2value,
       cellRender
@@ -279,6 +293,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         columns={searchResultColumns!}
         options={options}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
         cellRender={cellRender}
@@ -289,6 +304,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         className={cx('Transfer-checkboxes')}
         options={options}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
       />
@@ -298,6 +314,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         className={cx('Transfer-checkboxes')}
         options={options}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
       />
@@ -307,6 +324,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         className={cx('Transfer-checkboxes')}
         options={options}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
       />
@@ -319,6 +337,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
       columns,
       options,
       value,
+      disabled,
       onChange,
       option2value,
       classnames: cx,
@@ -336,6 +355,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         columns={columns!}
         options={options || []}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
         onDeferLoad={onDeferLoad}
@@ -346,6 +366,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         className={cx('Transfer-checkboxes')}
         options={options || []}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
         onDeferLoad={onDeferLoad}
@@ -355,6 +376,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         className={cx('Transfer-checkboxes')}
         options={options || []}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
         onDeferLoad={onDeferLoad}
@@ -364,6 +386,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         className={cx('Transfer-checkboxes')}
         options={options || []}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
         onDeferLoad={onDeferLoad}
@@ -378,6 +401,7 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
         className={cx('Transfer-checkboxes')}
         options={options || []}
         value={value}
+        disabled={disabled}
         onChange={onChange}
         option2value={option2value}
         onDeferLoad={onDeferLoad}
@@ -439,15 +463,16 @@ export class Transfer extends React.Component<TransferProps, TransferState> {
                 disabled || !this.valueArray.length ? 'is-disabled' : ''
               )}
             >
-              {__('清空')}
+              {__('clear')}
             </a>
           </div>
           <ResultList
             className={cx('Transfer-selections')}
             sortable={sortable}
+            disabled={disabled}
             value={value}
             onChange={onChange}
-            placeholder={__('请先选择左侧数据')}
+            placeholder={__('Transfer.selectFromLeft')}
           />
         </div>
       </div>

@@ -1,54 +1,237 @@
 import React from 'react';
-import {FormItem, FormControlProps} from './Item';
+import {FormItem, FormControlProps, FormBaseControl} from './Item';
 import 'cropperjs/dist/cropper.css';
 import Cropper from 'react-cropper';
 import DropZone from 'react-dropzone';
+import {FileRejection} from 'react-dropzone';
 import 'blueimp-canvastoblob';
 import find from 'lodash/find';
 import qs from 'qs';
 import {Payload} from '../../types';
 import {buildApi} from '../../utils/api';
-import {createObject, qsstringify, guid} from '../../utils/helper';
+import {createObject, qsstringify, guid, isEmpty} from '../../utils/helper';
 import {Icon} from '../../components/icons';
 import Button from '../../components/Button';
-// @ts-ignore
 import accepts from 'attr-accept';
 import {getNameFromUrl} from './File';
 import ImageComponent, {ImageThumbProps} from '../Image';
 import {TranslateFn} from '../../locale';
+import {dataMapping} from '../../utils/tpl-builtin';
+import {
+  SchemaApi,
+  SchemaClassName,
+  SchemaTokenizeableString,
+  SchemaUrlPath
+} from '../../Schema';
 
-let preventEvent = (e: any) => e.stopPropagation();
+/**
+ * Image 图片上传控件
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/image
+ */
+export interface ImageControlSchema extends FormBaseControl {
+  /**
+   * 指定为图片上传控件
+   */
+  type: 'image';
 
-export interface ImageProps extends FormControlProps {
-  placeholder?: string;
-  reciever?: string;
-  limit?: {
-    width?: number;
-    height?: number;
-    maxWidth?: number;
-    minWidth?: number;
+  /**
+   * 默认展示图片的链接
+   */
+  src?: SchemaUrlPath;
+
+  /**
+   * 默认展示图片的类名
+   */
+  imageClassName?: string;
+
+  /**
+   * 配置接收的图片类型
+   *
+   * 建议直接填写文件后缀
+   * 如：.txt,.csv
+   *
+   * 多个类型用逗号隔开。
+   */
+  accept?: string;
+
+  /**
+   * 默认都是通过用户选择图片后上传返回图片地址，如果开启此选项，则可以允许用户图片地址。
+   */
+  allowInput?: boolean;
+
+  /**
+   * 是否自动开始上传
+   */
+  autoUpload?: boolean;
+
+  /**
+   * 选择图片按钮的 CSS 类名
+   */
+  btnClassName?: SchemaClassName;
+
+  /**
+   * 上传按钮的 CSS 类名
+   */
+  btnUploadClassName?: SchemaClassName;
+
+  /**
+   * @deprecated
+   */
+  compress?: boolean;
+
+  /**
+   * @deprecated
+   */
+  compressOptions?: {
     maxHeight?: number;
-    minHeight?: number;
-    aspectRatio?: number;
-    aspectRatioLabel?: string;
+    maxWidth?: number;
   };
-  reCropable: boolean;
+
   crop?:
     | boolean
     | {
+        /**
+         * 默认 `1` 即 `1:1`
+         *
+         * 留空将不限制
+         */
         aspectRatio?: number;
-        [propName: string]: any;
-      };
-  accept?: string;
 
+        guides?: boolean;
+        dragMode?: string;
+        viewMode?: number;
+        rotatable?: boolean;
+        scalable?: boolean;
+      };
+
+  /**
+   * 是否允许二次裁剪。
+   */
+  reCropable?: boolean;
+
+  /**
+   * 是否隐藏上传按钮
+   */
   hideUploadButton?: boolean;
-  joinValues?: boolean;
-  extractValue?: boolean;
-  delimiter?: string;
-  autoUpload?: boolean;
+
+  /**
+   * 限制图片大小，超出不让上传。
+   */
+  limit?: {
+    /**
+     * 比率不对时的提示文字
+     */
+    aspectRatioLabel?: string;
+    /**
+     * 限制比率
+     */
+    aspectRatio?: number;
+
+    /**
+     * 限制图片高度
+     */
+    height?: number;
+
+    /**
+     *  限制图片宽度
+     */
+    width?: number;
+
+    /**
+     * 限制图片最大高度
+     */
+    maxHeight?: number;
+
+    /**
+     * 限制图片最大宽度
+     */
+    maxWidth?: number;
+
+    /**
+     * 限制图片最小高度
+     */
+    minHeight?: number;
+
+    /**
+     *  限制图片最小宽度
+     */
+    minWidth?: number;
+  };
+
+  /**
+   * 最多的个数
+   */
+  maxLength?: number;
+
+  /**
+   * 默认没有限制，当设置后，文件大小大于此值将不允许上传。
+   */
+  maxSize?: number;
+
+  /**
+   * 默认 `/api/upload` 如果想自己存储，请设置此选项。
+   */
+  receiver?: SchemaApi;
+
+  /**
+   * 默认为 false, 开启后，允许用户输入压缩选项。
+   *
+   * @deprecated
+   */
+  showCompressOptions?: boolean;
+
+  /**
+   * 是否为多选
+   */
   multiple?: boolean;
+
+  /**
+   * 单选模式：当用户选中某个选项时，选项中的 value 将被作为该表单项的值提交，否则，整个选项对象都会作为该表单项的值提交。
+   * 多选模式：选中的多个选项的 `value` 会通过 `delimiter` 连接起来，否则直接将以数组的形式提交值。
+   */
+  joinValues?: boolean;
+
+  /**
+   * 分割符
+   */
+  delimiter?: string;
+
+  /**
+   * 开启后将选中的选项 value 的值封装为数组，作为当前表单项的值。
+   */
+  extractValue?: boolean;
+
+  /**
+   * 清除时设置的值
+   */
+  resetValue?: any;
+
+  /**
+   * 缩路图展示模式
+   */
   thumbMode?: 'w-full' | 'h-full' | 'contain' | 'cover';
+
+  /**
+   * 缩路图展示比率。
+   */
   thumbRatio?: '1:1' | '4:3' | '16:9';
+
+  /**
+   * 上传后把其他字段同步到表单内部。
+   */
+  autoFill?: {
+    [propName: string]: SchemaTokenizeableString;
+  };
+}
+
+let preventEvent = (e: any) => e.stopPropagation();
+
+export interface ImageProps
+  extends FormControlProps,
+    Omit<
+      ImageControlSchema,
+      'type' | 'className' | 'descriptionClassName' | 'inputClassName'
+    > {
   onImageEnlarge?: (
     info: Pick<ImageThumbProps, 'src' | 'originalSrc' | 'title' | 'caption'> & {
       index?: number;
@@ -98,9 +281,9 @@ export default class ImageControl extends React.Component<
   static defaultProps = {
     limit: undefined,
     accept: 'image/jpeg, image/jpg, image/png, image/gif',
-    reciever: '/api/upload',
+    receiver: '/api/upload',
     hideUploadButton: false,
-    placeholder: '点击选择图片或者将图片拖入该区域',
+    placeholder: 'Image.placeholder',
     joinValues: true,
     extractValue: false,
     delimiter: ',',
@@ -146,12 +329,12 @@ export default class ImageControl extends React.Component<
     __: TranslateFn
   ): string {
     if (!width) {
-      return __('高度{{height}}px', {height: height});
+      return __('Image.height', {height: height});
     } else if (!height) {
-      return __('宽度{{width}}px', {width: width});
+      return __('Image.width', {width: width});
     }
 
-    return __('尺寸（{{width}} x {{height}}）', {width, height});
+    return __('Image.size', {width, height});
   }
 
   state: ImageState = {
@@ -190,7 +373,7 @@ export default class ImageControl extends React.Component<
 
     this.state = {
       ...this.state,
-      files: this.files = files,
+      files: (this.files = files),
       crop: this.buildCrop(props)
     };
 
@@ -256,7 +439,7 @@ export default class ImageControl extends React.Component<
       }
 
       this.setState({
-        files: this.files = files
+        files: (this.files = files)
       });
     }
 
@@ -276,9 +459,7 @@ export default class ImageControl extends React.Component<
     const __ = this.props.translate;
 
     if (crop && props.multiple) {
-      props.env &&
-        props.env.alert &&
-        props.env.alert(__('图片多选配置和裁剪配置冲突，目前不能二者都支持！'));
+      props.env && props.env.alert && props.env.alert(__('Image.configError'));
       return null;
     }
 
@@ -301,17 +482,20 @@ export default class ImageControl extends React.Component<
     return crop;
   }
 
-  handleDropRejected(rejectedFiles: any, evt: React.DragEvent<any>) {
+  handleDropRejected(
+    rejectedFiles: FileRejection[],
+    evt: React.DragEvent<any>
+  ) {
     if (evt.type !== 'change' && evt.type !== 'drop') {
       return;
     }
     const {multiple, env, accept, translate: __} = this.props;
 
-    const files = rejectedFiles.map((file: any) => ({
-      ...file,
+    const files = rejectedFiles.map(fileRejection => ({
+      ...fileRejection.file,
       state: 'invalid',
       id: guid(),
-      name: file.name
+      name: fileRejection.file.name
     }));
 
     // this.setState({
@@ -323,7 +507,7 @@ export default class ImageControl extends React.Component<
     // });
 
     env.alert(
-      __('您添加的文件{{files}}不符合类型的`{{accept}}`的设定，请仔细检查。', {
+      __('File.invalidType', {
         files: files.map((file: any) => `「${file.name}」`).join(' '),
         accept
       })
@@ -339,14 +523,14 @@ export default class ImageControl extends React.Component<
       {
         uploading: true,
         locked: true,
-        files: this.files = this.files.map(file => {
+        files: (this.files = this.files.map(file => {
           if (retry && file.state === 'error') {
             file.state = 'pending';
             file.progress = 0;
           }
 
           return file;
-        })
+        }))
       },
       this.tick
     );
@@ -367,6 +551,7 @@ export default class ImageControl extends React.Component<
   }
 
   tick() {
+    const {multiple, autoFill, onBulkChange} = this.props;
     if (this.current || !this.state.uploading) {
       return;
     }
@@ -380,7 +565,7 @@ export default class ImageControl extends React.Component<
       file.state = 'uploading';
       this.setState(
         {
-          files: this.files = this.files.concat()
+          files: (this.files = this.files.concat())
         },
         () =>
           this.sendFile(
@@ -406,16 +591,17 @@ export default class ImageControl extends React.Component<
 
                   return this.setState(
                     {
-                      files: this.files = files,
+                      files: (this.files = files),
                       error: error
                     },
                     this.tick
                   );
                 }
 
-                env.notify('error', error || __('图片上传失败，请重试'));
+                env.notify('error', error || __('File.errorRetry'));
               } else {
                 newFile = {
+                  name: file.name,
                   ...obj,
                   preview: file.preview
                 } as FileValue;
@@ -424,9 +610,19 @@ export default class ImageControl extends React.Component<
               this.current = null;
               this.setState(
                 {
-                  files: this.files = files
+                  files: (this.files = files)
                 },
-                this.tick
+                () => {
+                  // todo 这个逻辑应该移到 onChange 里面去，因为这个时候并不一定修改了表单项的值。
+                  const sendTo =
+                    !multiple &&
+                    autoFill &&
+                    !isEmpty(autoFill) &&
+                    dataMapping(autoFill, newFile || {});
+                  sendTo && onBulkChange(sendTo);
+
+                  this.tick();
+                }
               );
             },
             progress => {
@@ -440,7 +636,7 @@ export default class ImageControl extends React.Component<
               // file 是个非 File 对象，先不copy了直接改。
               file.progress = progress;
               this.setState({
-                files: this.files = files
+                files: (this.files = files)
               });
             }
           )
@@ -457,7 +653,7 @@ export default class ImageControl extends React.Component<
           if (this.resolve) {
             this.resolve(
               this.files.some(file => file.state === 'error')
-                ? __('文件上传失败请重试')
+                ? __('File.errorRetry')
                 : null
             );
             this.resolve = undefined;
@@ -474,7 +670,7 @@ export default class ImageControl extends React.Component<
 
     this.setState(
       {
-        files: this.files = files
+        files: (this.files = files)
       },
       this.onChange
     );
@@ -592,7 +788,7 @@ export default class ImageControl extends React.Component<
     const event = e.nativeEvent as any;
     const files: Array<FileX> = [];
     const items = event.clipboardData.items;
-    const accept = this.props.accept;
+    const accept = this.props.accept || '*';
 
     [].slice.call(items).forEach((item: DataTransferItem) => {
       let blob: FileX;
@@ -656,15 +852,12 @@ export default class ImageControl extends React.Component<
 
     [].slice.call(files, 0, allowed).forEach((file: FileX) => {
       if (maxSize && file.size > maxSize) {
-        alert(
-          __(
-            '您选择的文件 {{filename}} 大小为 {{actualSize}} 超出了最大为 {{maxSize}} 的限制，请重新选择。',
-            {
-              filename: file.name,
-              actualSize: ImageControl.formatFileSize(file.size),
-              maxSize: ImageControl.formatFileSize(maxSize)
-            }
-          )
+        this.props.env.alert(
+          __('File.maxSize', {
+            filename: file.name,
+            actualSize: ImageControl.formatFileSize(file.size),
+            maxSize: ImageControl.formatFileSize(maxSize)
+          })
         );
         return;
       }
@@ -684,7 +877,7 @@ export default class ImageControl extends React.Component<
     this.setState(
       {
         error: undefined,
-        files: this.files = currentFiles.concat(inputFiles),
+        files: (this.files = currentFiles.concat(inputFiles)),
         locked: true
       },
       () => {
@@ -718,33 +911,30 @@ export default class ImageControl extends React.Component<
         (limit.width && limit.width != width) ||
         (limit.height && limit.height != height)
       ) {
-        error = __('您选择的图片不符合尺寸要求, 请上传{{info}}的图片', {
+        error = __('Image.sizeNotEqual', {
           info: ImageControl.sizeInfo(limit.width, limit.height, __)
         });
       } else if (
         (limit.maxWidth && limit.maxWidth < width) ||
         (limit.maxHeight && limit.maxHeight < height)
       ) {
-        error = __('您选择的图片不符合尺寸要求, 请上传不要超过{{info}}的图片', {
+        error = __('Image.limitMax', {
           info: ImageControl.sizeInfo(limit.maxWidth, limit.maxHeight, __)
         });
       } else if (
         (limit.minWidth && limit.minWidth > width) ||
         (limit.minHeight && limit.minHeight > height)
       ) {
-        error = __('您选择的图片不符合尺寸要求, 请上传不要小于{{info}}的图片', {
+        error = __('Image.limitMin', {
           info: ImageControl.sizeInfo(limit.minWidth, limit.minHeight, __)
         });
       } else if (
         limit.aspectRatio &&
         Math.abs(width / height - limit.aspectRatio) > 0.01
       ) {
-        error = __(
-          '您选择的图片不符合尺寸要求, 请上传尺寸比率为 {{ratio}} 的图片',
-          {
-            ratio: limit.aspectRatioLabel || limit.aspectRatio
-          }
-        );
+        error = __(limit.aspectRatioLabel || 'Image.limitRatio', {
+          ratio: limit.aspectRatio
+        });
       }
 
       if (error) {
@@ -763,10 +953,10 @@ export default class ImageControl extends React.Component<
     onProgress: (progress: number) => void
   ) {
     const __ = this.props.translate;
-    this._send(file, this.props.reciever as string, {}, onProgress)
+    this._send(file, this.props.receiver as string, {}, onProgress)
       .then((ret: Payload) => {
         if (ret.status) {
-          throw new Error(ret.msg || __('上传失败, 请重试'));
+          throw new Error(ret.msg || __('File.errorRetry'));
         }
 
         const obj: FileValue = {
@@ -777,22 +967,21 @@ export default class ImageControl extends React.Component<
 
         cb(null, file, obj);
       })
-      .catch(error => cb(error.message || __('上传失败，请重试'), file));
+      .catch(error => cb(error.message || __('File.errorRetry'), file));
   }
 
   _send(
     file: Blob,
-    reciever: string,
+    receiver: string,
     params: object,
     onProgress: (progress: number) => void
   ): Promise<Payload> {
     const fd = new FormData();
     const data = this.props.data;
-    const api = buildApi(reciever, createObject(data, params), {
+    const api = buildApi(receiver, createObject(data, params), {
       method: 'post'
     });
     const fileField = this.props.fileField || 'file';
-    fd.append(fileField, file, (file as File).name);
 
     const idx = api.url.indexOf('?');
 
@@ -815,6 +1004,9 @@ export default class ImageControl extends React.Component<
         });
     }
 
+    // Note: File类型字段放在后面，可以支持第三方云存储鉴权
+    fd.append(fileField, file, (file as File).name);
+
     const env = this.props.env;
 
     if (!env || !env.fetcher) {
@@ -836,7 +1028,7 @@ export default class ImageControl extends React.Component<
     const imgDom = e.currentTarget;
     const img = new Image();
     img.onload = () => {
-      delete img.onload;
+      delete (img as any).onload;
       const files = this.files.concat();
       const file = files[index];
 
@@ -858,7 +1050,7 @@ export default class ImageControl extends React.Component<
       this.unmounted ||
         this.setState(
           {
-            files: this.files = files
+            files: (this.files = files)
           },
           !needUploading ? this.onChange : undefined
         );
@@ -885,7 +1077,7 @@ export default class ImageControl extends React.Component<
         this.startUpload();
       });
     } else if (this.files.some(item => item.state === 'error')) {
-      return __('文件上传失败请重试');
+      return __('File.errorRetry');
     }
   }
 
@@ -918,7 +1110,7 @@ export default class ImageControl extends React.Component<
               <a
                 className={cx('ImageControl-cropCancel')}
                 onClick={this.cancelCrop}
-                data-tooltip={__('取消')}
+                data-tooltip={__('cancle')}
                 data-position="left"
               >
                 <Icon icon="close" className="icon" />
@@ -926,7 +1118,7 @@ export default class ImageControl extends React.Component<
               <a
                 className={cx('ImageControl-cropConfirm')}
                 onClick={this.handleCrop}
-                data-tooltip={__('确认')}
+                data-tooltip={__('confirm')}
                 data-position="left"
               >
                 <Icon icon="check" className="icon" />
@@ -970,7 +1162,7 @@ export default class ImageControl extends React.Component<
                       'is-reject': isDragReject
                     })}
                   >
-                    {__('把图片拖到这，然后松开完成添加！')}
+                    {__('Image.dragDrop')}
                   </div>
                 ) : (
                   <>
@@ -990,7 +1182,7 @@ export default class ImageControl extends React.Component<
                               <>
                                 <a
                                   className={cx('ImageControl-itemClear')}
-                                  data-tooltip={__('移除')}
+                                  data-tooltip={__('Select.clear')}
                                   data-position="bottom"
                                   onClick={this.removeFile.bind(
                                     this,
@@ -1009,7 +1201,7 @@ export default class ImageControl extends React.Component<
                                 >
                                   <Icon icon="retry" className="icon" />
                                   <p className="ImageControl-itemInfoError">
-                                    {__('重新上传')}
+                                    {__('File.repick')}
                                   </p>
                                 </a>
                               </>
@@ -1023,7 +1215,7 @@ export default class ImageControl extends React.Component<
                                   )}
                                   key="clear"
                                   className={cx('ImageControl-itemClear')}
-                                  data-tooltip={__('移除')}
+                                  data-tooltip={__('Select.clear')}
                                 >
                                   <Icon icon="close" className="icon" />
                                 </a>
@@ -1031,7 +1223,7 @@ export default class ImageControl extends React.Component<
                                   key="info"
                                   className={cx('ImageControl-itemInfo')}
                                 >
-                                  <p>{__('文件上传中')}</p>
+                                  <p>{__('File.uploading')}</p>
                                   <div className={cx('ImageControl-progress')}>
                                     <span
                                       style={{
@@ -1083,9 +1275,10 @@ export default class ImageControl extends React.Component<
                                   )}
 
                                   <a
-                                    data-tooltip={__('查看大图')}
+                                    data-tooltip={__('Image.zoomIn')}
                                     data-position="bottom"
                                     target="_blank"
+                                    rel="noopener"
                                     href={file.url || file.preview}
                                     onClick={this.previewImage.bind(
                                       this,
@@ -1100,7 +1293,7 @@ export default class ImageControl extends React.Component<
                                   reCropable !== false &&
                                   !disabled ? (
                                     <a
-                                      data-tooltip={__('裁剪图片')}
+                                      data-tooltip={__('Image.crop')}
                                       data-position="bottom"
                                       onClick={this.editImage.bind(this, key)}
                                     >
@@ -1109,7 +1302,7 @@ export default class ImageControl extends React.Component<
                                   ) : null}
                                   {!disabled ? (
                                     <a
-                                      data-tooltip={__('移除')}
+                                      data-tooltip={__('Select.clear')}
                                       data-position="bottom"
                                       onClick={this.removeFile.bind(
                                         this,
@@ -1151,7 +1344,7 @@ export default class ImageControl extends React.Component<
 
                         {isFocused ? (
                           <span className={cx('ImageControl-pasteTip')}>
-                            {__('当前状态支持从剪切板中粘贴图片文件。')}
+                            {__('Image.pasteTip')}
                           </span>
                         ) : null}
                       </label>
@@ -1164,7 +1357,7 @@ export default class ImageControl extends React.Component<
                         disabled={!hasPending}
                         onClick={this.toggleUpload}
                       >
-                        {__(uploading ? '暂停上传' : '开始上传')}
+                        {__(uploading ? 'File.pause' : 'File.start')}
                       </Button>
                     ) : null}
 

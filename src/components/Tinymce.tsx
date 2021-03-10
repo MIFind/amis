@@ -4,6 +4,7 @@ import React from 'react';
 import tinymce from 'tinymce/tinymce';
 
 // A theme is also required
+import 'tinymce/icons/default/index';
 import 'tinymce/themes/silver';
 import 'tinymce/skins/ui/oxide/skin.css';
 
@@ -45,7 +46,7 @@ interface TinymceEditorProps extends LocaleProps {
   disabled?: boolean;
   config?: any;
   outputFormat?: 'html' | 'text';
-  reciever?: string;
+  receiver?: string;
 }
 
 export default class TinymceEditor extends React.Component<TinymceEditorProps> {
@@ -66,7 +67,7 @@ export default class TinymceEditor extends React.Component<TinymceEditorProps> {
       skin: false,
       content_css: false,
       height: 400,
-      language: !locale || locale === 'zh-cn' ? 'zh_CN' : 'en',
+      language: !locale || locale === 'zh-CN' ? 'zh_CN' : 'en',
       plugins: [
         'advlist autolink link image lists charmap print preview hr anchor pagebreak spellchecker',
         'searchreplace wordcount visualblocks visualchars code fullscreen insertdatetime media nonbreaking',
@@ -124,6 +125,17 @@ export default class TinymceEditor extends React.Component<TinymceEditorProps> {
     };
 
     tinymce.init(this.config);
+  }
+
+  componentDidUpdate(prevProps: TinymceEditorProps) {
+    const props = this.props;
+
+    if (
+      props.model !== prevProps.model &&
+      props.model !== this.currentContent
+    ) {
+      this.editor?.setContent(props.model || '');
+    }
   }
 
   componentWillUnmount() {

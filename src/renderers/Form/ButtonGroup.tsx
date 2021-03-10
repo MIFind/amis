@@ -1,17 +1,40 @@
 import React from 'react';
 import cx from 'classnames';
-import {OptionsControl, OptionsControlProps, Option} from './Options';
+import {
+  OptionsControl,
+  OptionsControlProps,
+  Option,
+  FormOptionsControl
+} from './Options';
 import {Button} from '../../types';
 import {getLevelFromClassName, autobind, isEmpty} from '../../utils/helper';
 import {dataMapping} from '../../utils/tpl-builtin';
+import {ButtonGroupSchema} from '../ButtonGroup';
+import {FormBaseControl} from './Item';
 
-export interface ButtonGroupProps extends OptionsControlProps {
-  buttons?: Array<Button>;
-  btnLevel: string;
-  btnActiveLevel: string;
-  btnClassName: string;
-  btnActiveClassName: string;
-  vertical?: boolean;
+/**
+ * 按钮组控件。
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/button-group
+ */
+export interface ButtonGroupControlSchema
+  extends ButtonGroupSchema,
+    Omit<FormOptionsControl, 'size'> {
+  type: 'button-group';
+}
+
+export interface ButtonGroupProps
+  extends OptionsControlProps,
+    Omit<
+      ButtonGroupControlSchema,
+      | 'size'
+      | 'source'
+      | 'type'
+      | 'className'
+      | 'descriptionClassName'
+      | 'inputClassName'
+      | 'btnClassName'
+    > {
+  options: Array<Option>;
 }
 
 export default class ButtonGroupControl extends React.Component<
@@ -28,13 +51,6 @@ export default class ButtonGroupControl extends React.Component<
   @autobind
   handleToggle(option: Option) {
     const {onToggle, multiple, autoFill, onBulkChange} = this.props;
-
-    const sendTo =
-      !multiple &&
-      autoFill &&
-      !isEmpty(autoFill) &&
-      dataMapping(autoFill, option as Option);
-    sendTo && onBulkChange(sendTo);
     onToggle(option);
   }
 
@@ -96,7 +112,7 @@ export default class ButtonGroupControl extends React.Component<
           }
         );
       });
-    } else if (buttons) {
+    } else if (Array.isArray(buttons)) {
       body = buttons.map((button, key) =>
         render(
           `button/${key}`,

@@ -4,11 +4,21 @@ import debouce from 'lodash/debounce';
 
 import {RendererProps, Renderer} from '../../factory';
 import {ComboStore, IComboStore, IUniqueGroup} from '../../store/combo';
-import {anyChanged, promisify, isObject, getVariable} from '../../utils/helper';
+import {
+  anyChanged,
+  promisify,
+  isObject,
+  getVariable,
+  guid
+} from '../../utils/helper';
 import {Schema} from '../../types';
-import {IIRendererStore} from '../../store';
+import {IIRendererStore, IRendererStore} from '../../store';
 import {ScopedContext, IScopedContext} from '../../Scoped';
 import {reaction} from 'mobx';
+import {FormItemStore} from '../../store/formItem';
+import {isAlive} from 'mobx-state-tree';
+import {observer} from 'mobx-react';
+import {withRootStore} from '../../WithRootStore';
 
 export interface ControlProps extends RendererProps {
   control: {
@@ -26,11 +36,17 @@ export interface ControlProps extends RendererProps {
     valueField?: string;
     labelField?: string;
     unique?: boolean;
+    selectFirst?: boolean;
+    autoFill?: any;
+    clearValueOnHidden?: boolean;
     pipeIn?: (value: any, data: any) => any;
     pipeOut?: (value: any, originValue: any, data: any) => any;
-    validate?: (value: any, values: any) => any;
+    validate?: (value: any, values: any, name: string) => any;
   } & Schema;
+  rootStore: IRendererStore;
   formStore: IFormStore;
+  onChange?: (value: any, name: string, submit: boolean) => void;
+  // onTmpValueChange?: (value: any, name: string) => void;
   store: IIRendererStore;
   addHook: (fn: () => any, type?: 'validate' | 'init' | 'flush') => void;
   removeHook: (fn: () => any, type?: 'validate' | 'init' | 'flush') => void;
@@ -40,15 +56,12 @@ interface ControlState {
   value: any;
 }
 
-export default class FormControl extends React.PureComponent<
-  ControlProps,
-  ControlState
-> {
+@observer
+export default class FormControl extends React.PureComponent<ControlProps> {
   static propsList: any = ['control'];
-
   public model: IFormItemStore | undefined;
   control: any;
-  value?: any;
+  value?: any = undefined;
   hook?: () => any;
   hook2?: () => any;
   hook3?: () => any;
@@ -64,10 +77,11 @@ export default class FormControl extends React.PureComponent<
     trailing: true,
     leading: false
   });
-  state = {value: this.value = this.props.control.value};
   componentWillMount() {
     const {
       formStore: form,
+      formItem,
+      rootStore,
       control: {
         name,
         id,
@@ -82,7 +96,11 @@ export default class FormControl extends React.PureComponent<
         valueField,
         labelField,
         joinValues,
-        extractValue
+        extractValue,
+        selectFirst,
+        autoFill,
+        clearValueOnHidden,
+        validateOnChange
       }
     } = this.props;
 
@@ -98,7 +116,17 @@ export default class FormControl extends React.PureComponent<
       return;
     }
 
-    const model = (this.model = form.registryItem(name, {
+    const model = rootStore.addStore({
+      id: guid(),
+      path: this.props.$path,
+      storeType: FormItemStore.name,
+      parentId: form.id,
+      name
+    }) as IFormItemStore;
+    this.model = model;
+    form.addFormItem(model);
+    formItem?.addSubFormItem(model);
+    model.config({
       id,
       type,
       required,
@@ -111,25 +139,36 @@ export default class FormControl extends React.PureComponent<
       valueField,
       labelField,
       joinValues,
-      extractValue
-    }));
+      extractValue,
+      selectFirst,
+      autoFill,
+      clearValueOnHidden
+    });
 
-    if (
-      this.model.unique &&
-      form.parentStore &&
-      form.parentStore.storeType === ComboStore.name
-    ) {
+    if (this.model.unique && form.parentStore?.storeType === ComboStore.name) {
       const combo = form.parentStore as IComboStore;
-      combo.bindUniuqueItem(this.model);
+      combo.bindUniuqueItem(model);
     }
 
     // 同步 value
-    this.setState({
-      value: this.value = model.value
-    });
+    model.changeTmpValue(model.value);
     this.reaction = reaction(
       () => model.value,
-      value => this.setState({value: this.value = value})
+      value => {
+        if (value !== model.tmpValue) {
+          model.changeTmpValue(value);
+        }
+
+        if (
+          validateOnChange === true ||
+          (validateOnChange !== false &&
+            (form.submited || (isAlive(model) && model.validated)))
+        ) {
+          this.lazyValidate();
+        } else if (validateOnChange === false) {
+          model.reset();
+        }
+      }
     );
   }
 
@@ -141,13 +180,6 @@ export default class FormControl extends React.PureComponent<
       addHook
     } = this.props;
 
-    if (name && form !== store) {
-      const value = getVariable(store.data, name);
-      if (typeof value !== 'undefined' && value !== this.getValue()) {
-        this.handleChange(value, false, true);
-      }
-    }
-
     // 提交前先把之前的 lazyEmit 执行一下。
     this.hook3 = () => {
       this.lazyEmitChange.flush();
@@ -158,13 +190,15 @@ export default class FormControl extends React.PureComponent<
     const formItem = this.model as IFormItemStore;
     if (formItem && validate) {
       let finalValidate = promisify(validate.bind(formItem));
-      this.hook2 = function() {
+      this.hook2 = function () {
         formItem.clearError('control:valdiate');
-        return finalValidate(form.data, formItem.value).then((ret: any) => {
-          if ((typeof ret === 'string' || Array.isArray(ret)) && ret) {
-            formItem.addError(ret, 'control:valdiate');
+        return finalValidate(form.data, formItem.value, formItem.name).then(
+          (ret: any) => {
+            if ((typeof ret === 'string' || Array.isArray(ret)) && ret) {
+              formItem.addError(ret, 'control:valdiate');
+            }
           }
-        });
+        );
       };
       addHook(this.hook2);
     }
@@ -227,7 +261,10 @@ export default class FormControl extends React.PureComponent<
           'valueField',
           'labelField',
           'joinValues',
-          'extractValue'
+          'extractValue',
+          'selectFirst',
+          'autoFill',
+          'clearValueOnHidden'
         ],
         props.control,
         nextProps.control
@@ -245,32 +282,11 @@ export default class FormControl extends React.PureComponent<
         labelField: nextProps.control.labelField,
         joinValues: nextProps.control.joinValues,
         extractValue: nextProps.control.extractValue,
-        messages: nextProps.control.validationErrors
+        messages: nextProps.control.validationErrors,
+        selectFirst: nextProps.control.selectFirst,
+        autoFill: nextProps.control.autoFill,
+        clearValueOnHidden: nextProps.control.clearValueOnHidden
       });
-    }
-  }
-
-  componentDidUpdate(prevProps: ControlProps) {
-    const {
-      store,
-      formStore: form,
-      data,
-      control: {name}
-    } = this.props;
-
-    if (!name) {
-      return;
-    }
-
-    // form 里面部分塞 service 的用法
-    let value: any;
-    if (
-      form !== store &&
-      data !== prevProps.data &&
-      (value = getVariable(data as any, name)) !==
-        getVariable(prevProps.data, name)
-    ) {
-      this.handleChange(value, false, true);
     }
   }
 
@@ -286,7 +302,7 @@ export default class FormControl extends React.PureComponent<
   }
 
   disposeModel() {
-    const {formStore: form} = this.props;
+    const {formStore: form, formItem} = this.props;
 
     if (
       this.model &&
@@ -298,7 +314,11 @@ export default class FormControl extends React.PureComponent<
       combo.unBindUniuqueItem(this.model);
     }
 
-    this.model && form.unRegistryItem(this.model);
+    this.model &&
+      formItem &&
+      isAlive(formItem) &&
+      formItem.removeSubFormItem(this.model);
+    this.model && form.removeFormItem(this.model);
   }
 
   controlRef(control: any) {
@@ -312,10 +332,10 @@ export default class FormControl extends React.PureComponent<
     if (control && control.validate && this.model) {
       const formItem = this.model as IFormItemStore;
       let validate = promisify(control.validate.bind(control));
-      this.hook = function() {
+      this.hook = function () {
         formItem.clearError('component:valdiate');
 
-        return validate(form.data, formItem.value).then(ret => {
+        return validate(form.data, formItem.value, formItem.name).then(ret => {
           if ((typeof ret === 'string' || Array.isArray(ret)) && ret) {
             formItem.setError(ret, 'component:valdiate');
           }
@@ -363,9 +383,12 @@ export default class FormControl extends React.PureComponent<
       formInited
     } = this.props;
 
-    // todo 以后想办法不要強耦合类型。
-    if (!this.model || ~['service'].indexOf(type)) {
-      onChange && onChange(...(arguments as any));
+    if (
+      !this.model ||
+      // todo 以后想办法不要強耦合类型。
+      ~['service', 'group', 'hbox', 'panel', 'grid'].indexOf(type)
+    ) {
+      onChange && onChange.apply(null, arguments as any);
       return;
     }
 
@@ -374,12 +397,13 @@ export default class FormControl extends React.PureComponent<
       value = pipeOut(value, oldValue, form.data);
     }
 
-    this.setState({
-      value: this.value = value
-    });
-    changeImmediately || conrolChangeImmediately || !formInited
-      ? this.emitChange(submitOnChange)
-      : this.lazyEmitChange(submitOnChange);
+    this.model.changeTmpValue(value);
+    if (changeImmediately || conrolChangeImmediately || !formInited) {
+      this.emitChange(submitOnChange);
+    } else {
+      // this.props.onTmpValueChange?.(value, this.model.name);
+      this.lazyEmitChange(submitOnChange);
+    }
   }
 
   emitChange(submitOnChange: boolean = this.props.control.submitOnChange) {
@@ -392,7 +416,7 @@ export default class FormControl extends React.PureComponent<
     if (!this.model) {
       return;
     }
-    const value = this.value; // value 跟 this.state.value 更及时。
+    const value = this.model.tmpValue;
     const oldValue = this.model.value;
 
     if (oldValue === value) {
@@ -401,17 +425,8 @@ export default class FormControl extends React.PureComponent<
 
     this.model.changeValue(value);
 
-    if (
-      validateOnChange === true ||
-      (validateOnChange !== false && (form.submited || this.model.validated))
-    ) {
-      this.lazyValidate();
-    } else if (validateOnChange === false && !this.model.valid) {
-      this.model.reset();
-    }
-
     onFormItemChange && onFormItemChange(value, oldValue, this.model, form);
-    onChange && onChange(value, name, submitOnChange === true);
+    onChange && onChange(value, name!, submitOnChange === true);
   }
 
   handleBlur(e: any) {
@@ -440,7 +455,11 @@ export default class FormControl extends React.PureComponent<
 
     if (!isObject(values)) {
       return;
-    } else if (!this.model || ~['service'].indexOf(type)) {
+    } else if (
+      !this.model ||
+      // todo 以后想办法不要強耦合类型。
+      ~['service', 'group', 'hbox', 'panel', 'grid'].indexOf(type)
+    ) {
       onBulkChange && onBulkChange(values);
       return;
     }
@@ -488,7 +507,7 @@ export default class FormControl extends React.PureComponent<
 
   getValue() {
     const {formStore: form, control} = this.props;
-    let value: any = this.state.value;
+    let value: any = this.model ? this.model.tmpValue : control.value;
 
     if (control.pipeIn) {
       value = control.pipeIn(value, form.data);
@@ -542,6 +561,7 @@ export default class FormControl extends React.PureComponent<
       formItemValue: value, // 为了兼容老版本的自定义组件
       onChange:
         control.type === 'input-group' ? superOnChange : this.handleChange,
+
       onBlur: this.handleBlur,
       setValue: this.setValue,
       getValue: this.getValue,
@@ -558,6 +578,8 @@ export default class FormControl extends React.PureComponent<
     !/\/control\/control$/i.test(path),
   name: 'control'
 })
+// @ts-ignore
+@withRootStore
 export class FormControlRenderer extends FormControl {
   static displayName = 'Control';
   static contextType = ScopedContext;

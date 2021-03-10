@@ -10,8 +10,52 @@ import {resolveVariable, isPureVariable} from '../utils/tpl-builtin';
 import {isApiOutdated, isEffectiveApi} from '../utils/api';
 import {ScopedContext, IScopedContext} from '../Scoped';
 import {Api} from '../types';
-import {ClassNamesFn, themeable} from '../theme';
+import {ClassNamesFn, themeable, ThemeProps} from '../theme';
 import {Icon} from '../components/icons';
+import {BaseSchema, SchemaApi, SchemaIcon, SchemaUrlPath} from '../Schema';
+import {generateIcon} from '../utils/icon';
+
+export type NavItemSchema = {
+  /**
+   * 文字说明
+   */
+  label?: string;
+
+  /**
+   * 图标类名，参考 fontawesome 4。
+   */
+  icon?: SchemaIcon;
+
+  to?: SchemaUrlPath;
+
+  children?: Array<NavItemSchema>;
+} & Omit<BaseSchema, 'type'>;
+
+/**
+ * Nav 导航渲染器
+ * 文档：https://baidu.gitee.io/amis/docs/components/nav
+ */
+export interface NavSchema extends BaseSchema {
+  /**
+   * 指定为 Nav 导航渲染器
+   */
+  type: 'nav';
+
+  /**
+   * 链接地址集合
+   */
+  links?: Array<NavItemSchema>;
+
+  /**
+   * 可以通过 API 拉取。
+   */
+  source?: SchemaApi;
+
+  /**
+   * true 为垂直排列，false 为水平排列类似如 tabs。
+   */
+  stacked?: boolean;
+}
 
 export interface Link {
   className?: string;
@@ -31,13 +75,10 @@ export interface NavigationState {
   error?: string;
 }
 
-export interface NavigationProps extends RendererProps {
-  classnames: ClassNamesFn;
-  classPrefix: string;
-  className?: string;
-  stacked?: boolean;
-  links?: Links;
-  source?: Api;
+export interface NavigationProps
+  extends RendererProps,
+    Omit<ThemeProps, 'className'>,
+    Omit<NavSchema, 'type' | 'className'> {
   onSelect?: (item: Link) => any;
 }
 
@@ -143,7 +184,7 @@ export class Navigation extends React.Component<
 
         if (!payload.ok) {
           this.setState({
-            error: payload.msg || __('获取链接错误')
+            error: payload.msg || __('Nav.sourceError')
           });
         } else {
           const links = Array.isArray(payload.data)
@@ -159,7 +200,7 @@ export class Navigation extends React.Component<
 
           this.setState(
             {
-              links: this.syncLinks(this.props, links, true)
+              links: this.syncLinks(this.props, links)
             },
             () => {
               if (
@@ -274,7 +315,7 @@ export class Navigation extends React.Component<
         })}
       >
         <a onClick={this.handleClick.bind(this, link)}>
-          {link.icon ? <i className={cx('Nav-itemIcon', link.icon)} /> : null}
+          {generateIcon(cx, link.icon, 'Nav-itemIcon')}
           {link.label}
         </a>
 

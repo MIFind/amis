@@ -1,36 +1,24 @@
 #!/bin/bash
 set -e
 
-if [ -z "$(git status --porcelain)" ]; then 
-  # Working directory clean
-  echo "Working directory clean"
-else 
-  # Uncommitted changes
-  read -p "You got uncommitted changes, press y to continue? " -n 1 -r
-  echo    # (optional) move to a new line
-  if [[ ! $REPLY =~ ^[Yy]$ ]]
-  then
-    echo "Skiped!"
-    [[ "$0" = "$BASH_SOURCE" ]] && exit 1 || return 1 # handle exits from shell or function but don't exit interactive shell
-  fi
-fi
 
-rm -rf gh-pages
+echo "building"
+node ./scripts/generate-search-data.js
 
-fis3 release gh-pages -c
+npm run build-schemas
 
-node ./build/upload2cdn.js $1
+./node_modules/.bin/fis3 release gh-pages -c
 
-git add gh-pages -f
+# 拷贝一份兼容之前的访问路径
+cp -r gh-pages/zh-CN/docs/* gh-pages/docs/
 
-git commit -m "更新 gh-pages"
+cp ./schema.json ./gh-pages
 
-git push
+sh build.sh
 
-git subtree push --prefix gh-pages origin gh-pages
+tar -zcvf sdk.tar.gz sdk
 
-git commit -m 'rebuild pages' --allow-empty
+mv sdk.tar.gz gh-pages/
 
-git push origin
-
-echo "done"
+# 加这个 github page 就不会忽略下划线开头的文件
+touch gh-pages/.nojekyll

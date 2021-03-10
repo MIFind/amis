@@ -5,11 +5,50 @@
 
 import React from 'react';
 import cx from 'classnames';
-import {FormControlProps, FormItem} from './Item';
+import {FormBaseControl, FormControlProps, FormItem} from './Item';
 import {buildApi, isValidApi, isEffectiveApi} from '../../utils/api';
 import {Checkbox, Spinner} from '../../components';
 import {autobind, setVariable} from '../../utils/helper';
 import {ApiObject} from '../../types';
+import {SchemaApi} from '../../Schema';
+
+/**
+ * Matrix 选择控件。适合做权限勾选。
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/matrix
+ */
+export interface MatrixControlSchema extends FormBaseControl {
+  type: 'matrix';
+
+  /**
+   * 配置singleSelectMode时设置为false
+   */
+  multiple?: boolean;
+
+  /**
+   * 设置单选模式，multiple为false时有效
+   */
+  singleSelectMode?: boolean;
+
+  /**
+   * 可用来通过 API 拉取 options。
+   */
+  source?: SchemaApi;
+
+  columns?: Array<{
+    label: string;
+    [propName: string]: any;
+  }>;
+
+  rows?: Array<{
+    label: string;
+    [propName: string]: any;
+  }>;
+
+  /**
+   * 行标题说明
+   */
+  rowLabel?: string;
+}
 
 export interface Column {
   label: string;
@@ -142,7 +181,7 @@ export default class MatrixCheckbox extends React.Component<
     }
 
     // todo 优化这块
-    return await new Promise((resolve, reject) => {
+    return await new Promise<void>((resolve, reject) => {
       if (!this.mounted) {
         return resolve();
       }
@@ -159,7 +198,7 @@ export default class MatrixCheckbox extends React.Component<
             .fetcher(source, data)
             .then(ret => {
               if (!ret.ok) {
-                throw new Error(ret.msg || __('数据请求错误'));
+                throw new Error(ret.msg || __('fetchFailed'));
               }
               if (!this.mounted) {
                 return resolve();
@@ -189,7 +228,7 @@ export default class MatrixCheckbox extends React.Component<
                   error: reason,
                   loading: false
                 },
-                resolve
+                () => resolve()
               )
             );
         }

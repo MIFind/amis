@@ -1,5 +1,10 @@
 import React from 'react';
-import {OptionsControl, OptionsControlProps, Option} from './Options';
+import {
+  OptionsControl,
+  OptionsControlProps,
+  Option,
+  FormOptionsControl
+} from './Options';
 import cx from 'classnames';
 import Checkbox from '../../components/Checkbox';
 import chunk from 'lodash/chunk';
@@ -7,7 +12,39 @@ import {Icon} from '../../components/icons';
 import {Api} from '../../types';
 import {autobind} from '../../utils/helper';
 
-export interface CheckboxesProps extends OptionsControlProps {
+/**
+ * 复选框
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/checkboxes
+ */
+export interface CheckboxesControlSchema extends FormOptionsControl {
+  type: 'checkboxes';
+
+  /**
+   * 是否开启全选功能
+   */
+  checkAll?: boolean;
+
+  /**
+   * 是否默认全选
+   */
+  defaultCheckAll?: boolean;
+
+  /**
+   * 每行显示多少个
+   */
+  columnsCount?: number;
+}
+
+export interface CheckboxesProps
+  extends OptionsControlProps,
+    Omit<
+      CheckboxesControlSchema,
+      | 'options'
+      | 'type'
+      | 'className'
+      | 'descriptionClassName'
+      | 'inputClassName'
+    > {
   placeholder?: any;
   itemClassName?: string;
   columnsCount?: number;
@@ -27,9 +64,9 @@ export default class CheckboxesControl extends React.Component<
   static defaultProps = {
     columnsCount: 1,
     multiple: true,
-    placeholder: '暂无选项',
+    placeholder: 'placeholder.noOption',
     creatable: false,
-    createBtnLabel: '新增选项'
+    createBtnLabel: 'Select.createLabel'
   };
 
   componentDidMount() {
@@ -111,7 +148,8 @@ export default class CheckboxesControl extends React.Component<
       labelClassName,
       labelField,
       removable,
-      editable
+      editable,
+      translate: __
     } = this.props;
 
     return (
@@ -125,8 +163,9 @@ export default class CheckboxesControl extends React.Component<
         labelClassName={labelClassName}
         description={option.description}
       >
+        {String(option[labelField || 'label'])}
         {removable ? (
-          <a data-tooltip="移除" data-position="left">
+          <a data-tooltip={__('Select.clear')} data-position="left">
             <Icon
               icon="minus"
               className="icon"
@@ -143,7 +182,6 @@ export default class CheckboxesControl extends React.Component<
             />
           </a>
         ) : null}
-        {option[labelField || 'label']}
       </Checkbox>
     );
   }

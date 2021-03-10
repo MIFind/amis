@@ -17,32 +17,212 @@ import {
   noop
 } from '../utils/helper';
 import {resolveVariable} from '../utils/tpl-builtin';
-import QuickEdit from './QuickEdit';
-import PopOver from './PopOver';
+import QuickEdit, {SchemaQuickEdit} from './QuickEdit';
+import PopOver, {SchemaPopOver} from './PopOver';
 import Sortable from 'sortablejs';
 import {TableCell} from './Table';
-import Copyable from './Copyable';
+import Copyable, {SchemaCopyable} from './Copyable';
 import {Icon} from '../components/icons';
+import {
+  BaseSchema,
+  SchemaClassName,
+  SchemaCollection,
+  SchemaExpression,
+  SchemaObject,
+  SchemaTokenizeableString,
+  SchemaTpl,
+  SchemaUrlPath
+} from '../Schema';
+import {ActionSchema} from './Action';
+import {SchemaRemark} from './Remark';
+
+/**
+ * 不指定类型默认就是文本
+ */
+export type ListBodyFieldObject = {
+  /**
+   * 列标题
+   */
+  label?: string;
+
+  /**
+   * label 类名
+   */
+  labelClassName?: SchemaClassName;
+
+  /**
+   * 绑定字段名
+   */
+  name?: string;
+
+  /**
+   * 配置查看详情功能
+   */
+  popOver?: SchemaPopOver;
+
+  /**
+   * 配置快速编辑功能
+   */
+  quickEdit?: SchemaQuickEdit;
+
+  /**
+   * 配置点击复制功能
+   */
+  copyable?: SchemaCopyable;
+};
+
+export type ListBodyField = SchemaObject & ListBodyFieldObject;
+
+export interface ListItemSchema extends Omit<BaseSchema, 'type'> {
+  actions?: Array<ActionSchema>;
+
+  /**
+   * 操作位置，默认在右侧，可以设置成左侧。
+   */
+  actionsPosition?: 'left' | 'right';
+
+  /**
+   * 图片地址
+   */
+  avatar?: SchemaUrlPath;
+
+  /**
+   * 内容区域
+   */
+  body?: Array<ListBodyField | ListBodyFieldObject>;
+
+  /**
+   * 描述
+   */
+  desc?: SchemaTpl;
+
+  /**
+   * tooltip 说明
+   */
+  remark?: SchemaRemark;
+
+  /**
+   * 标题
+   */
+  title?: SchemaTpl;
+
+  /**
+   * 副标题
+   */
+  subTitle?: SchemaTpl;
+}
+
+/**
+ * List 列表展示控件。
+ * 文档：https://baidu.gitee.io/amis/docs/components/card
+ */
+export interface ListSchema extends BaseSchema {
+  /**
+   * 指定为 List 列表展示控件。
+   */
+  type: 'list' | 'static-list';
+
+  /**
+   * 标题
+   */
+  title?: SchemaTpl;
+
+  /**
+   * 底部区域
+   */
+  footer?: SchemaCollection;
+
+  /**
+   * 底部区域类名
+   */
+  footerClassName?: SchemaClassName;
+
+  /**
+   * 顶部区域
+   */
+  header?: SchemaCollection;
+
+  /**
+   * 顶部区域类名
+   */
+  headerClassName?: SchemaClassName;
+
+  /**
+   * 单条数据展示内容配置
+   */
+  listItem?: ListItemSchema;
+
+  /**
+   * 数据源: 绑定当前环境变量
+   *
+   * @default ${items}
+   */
+  source?: SchemaTokenizeableString;
+
+  /**
+   * 是否显示底部
+   */
+  showFooter?: boolean;
+
+  /**
+   * 是否显示头部
+   */
+  showHeader?: boolean;
+
+  /**
+   * 无数据提示
+   *
+   * @default 暂无数据
+   */
+  placeholder?: SchemaTpl;
+
+  /**
+   * 是否隐藏勾选框
+   */
+  hideCheckToggler?: boolean;
+
+  /**
+   * 是否固顶
+   */
+  affixHeader?: boolean;
+
+  /**
+   * 配置某项是否可以点选
+   */
+  itemCheckableOn?: SchemaExpression;
+
+  /**
+   * 配置某项是否可拖拽排序，前提是要开启拖拽功能
+   */
+  itemDraggableOn?: SchemaExpression;
+
+  /**
+   * 点击卡片的时候是否勾选卡片。
+   */
+  checkOnItemClick?: boolean;
+
+  /**
+   * 可以用来作为值的字段
+   */
+  valueField?: string;
+
+  /**
+   * 大小
+   */
+  size?: 'sm' | 'base';
+}
 
 export interface Column {
   type: string;
   [propName: string]: any;
 }
 
-export interface ListProps extends RendererProps {
-  title?: string; // 标题
-  header?: SchemaNode;
-  body?: SchemaNode;
-  footer?: SchemaNode;
+export interface ListProps
+  extends RendererProps,
+    Omit<ListSchema, 'type' | 'className'> {
   store: IListStore;
-  className?: string;
-  headerClassName?: string;
-  footerClassName?: string;
-  listItem?: any;
-  source?: string;
   selectable?: boolean;
   selected?: Array<any>;
-  valueField?: string;
   draggable?: boolean;
   onSelect: (
     selectedItems: Array<object>,
@@ -53,18 +233,15 @@ export interface ListProps extends RendererProps {
     diff: Array<object> | object,
     rowIndexes: Array<number> | number,
     unModifiedItems?: Array<object>,
-    rowOrigins?: Array<object> | object
+    rowOrigins?: Array<object> | object,
+    resetOnFailed?: boolean
   ) => void;
   onSaveOrder?: (moved: Array<object>, items: Array<object>) => void;
   onQuery: (values: object) => void;
-  hideCheckToggler?: boolean;
-  itemCheckableOn?: string;
-  itemDraggableOn?: string;
-  size?: 'sm' | 'base';
 }
 
 export default class List extends React.Component<ListProps, object> {
-  static propsList: Array<string> = [
+  static propsList: Array<keyof ListProps> = [
     'header',
     'headerToolbarRender',
     'footer',
@@ -84,7 +261,7 @@ export default class List extends React.Component<ListProps, object> {
   ];
   static defaultProps: Partial<ListProps> = {
     className: '',
-    placeholder: '没有数据',
+    placeholder: 'placeholder.noData',
     source: '$items',
     selectable: false,
     headerClassName: '',
@@ -248,7 +425,8 @@ export default class List extends React.Component<ListProps, object> {
     }
 
     const clip = (this.body as HTMLElement).getBoundingClientRect();
-    const offsetY = this.props.env.affixOffsetTop || 0;
+    const offsetY =
+      this.props.affixOffsetTop ?? this.props.env.affixOffsetTop ?? 0;
     const affixed = clip.top < offsetY && clip.top + clip.height - 40 > offsetY;
 
     this.body.offsetWidth &&
@@ -294,7 +472,8 @@ export default class List extends React.Component<ListProps, object> {
     item: IItem,
     values: object,
     saveImmediately?: boolean | any,
-    savePristine?: boolean
+    savePristine?: boolean,
+    resetOnFailed?: boolean
   ) {
     item.change(values, savePristine);
 
@@ -325,7 +504,8 @@ export default class List extends React.Component<ListProps, object> {
       difference(item.data, item.pristine, ['id', primaryField]),
       item.index,
       undefined,
-      item.pristine
+      item.pristine,
+      resetOnFailed
     );
   }
 
@@ -789,7 +969,9 @@ export default class List extends React.Component<ListProps, object> {
             )}
           </div>
         ) : (
-          <div className={cx('List-placeholder')}>{__(placeholder)}</div>
+          <div className={cx('List-placeholder')}>
+            {render('placeholder', __(placeholder))}
+          </div>
         )}
 
         {this.renderFooter()}
@@ -817,7 +999,9 @@ export class ListRenderer extends List {
   onCheck: (item: IItem) => void;
 }
 
-export interface ListItemProps extends RendererProps {
+export interface ListItemProps
+  extends RendererProps,
+    Omit<ListItemSchema, 'type' | 'className'> {
   hideCheckToggler?: boolean;
   item: IItem;
   itemIndex?: number;
@@ -872,10 +1056,12 @@ export class ListItem extends React.Component<ListItemProps> {
   handleQuickChange(
     values: object,
     saveImmediately?: boolean,
-    savePristine?: boolean
+    savePristine?: boolean,
+    resetOnFailed?: boolean
   ) {
     const {onQuickChange, item} = this.props;
-    onQuickChange && onQuickChange(item, values, saveImmediately, savePristine);
+    onQuickChange &&
+      onQuickChange(item, values, saveImmediately, savePristine, resetOnFailed);
   }
 
   renderLeft() {
@@ -932,7 +1118,7 @@ export class ListItem extends React.Component<ListItemProps> {
                 size: 'sm',
                 level: 'link',
                 type: 'button',
-                ...action
+                ...(action as any) // todo 等后面修复了干掉 https://github.com/microsoft/TypeScript/pull/38577
               },
               {
                 key: index,
@@ -1036,7 +1222,14 @@ export class ListItem extends React.Component<ListItemProps> {
       return null;
     } else if (Array.isArray(body)) {
       return body.map((child, index) =>
-        this.renderChild(child, `body/${index}`, index)
+        this.renderChild(
+          {
+            type: 'plain',
+            ...(typeof child === 'string' ? {type: 'tpl', tpl: child} : child)
+          },
+          `body/${index}`,
+          index
+        )
       );
     }
 
@@ -1056,7 +1249,8 @@ export class ListItem extends React.Component<ListItemProps> {
       checkOnItemClick,
       render,
       checkable,
-      classnames: cx
+      classnames: cx,
+      actionsPosition
     } = this.props;
 
     const avatar = filter(avatarTpl, data);
@@ -1067,7 +1261,10 @@ export class ListItem extends React.Component<ListItemProps> {
     return (
       <div
         onClick={checkOnItemClick && checkable ? this.handleClick : undefined}
-        className={cx('ListItem', className)}
+        className={cx(
+          `ListItem ListItem--actions-at-${actionsPosition || 'right'}`,
+          className
+        )}
       >
         {this.renderLeft()}
         {this.renderRight()}
@@ -1097,7 +1294,9 @@ export class ListItem extends React.Component<ListItemProps> {
   test: /(^|\/)(?:list|list-group)\/(?:.*\/)?list-item$/,
   name: 'list-item'
 })
-export class ListItemRenderer extends ListItem {}
+export class ListItemRenderer extends ListItem {
+  static propsList = ['multiple', ...ListItem.propsList];
+}
 
 @Renderer({
   test: /(^|\/)list-item-field$/,
@@ -1113,8 +1312,10 @@ export class ListItemFieldRenderer extends TableCell {
   };
   static propsList = [
     'quickEdit',
+    'quickEditEnabledOn',
     'popOver',
     'copyable',
+    'inline',
     ...TableCell.propsList
   ];
 

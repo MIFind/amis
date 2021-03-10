@@ -10,30 +10,109 @@ import {observer} from 'mobx-react';
 import {isApiOutdated, isEffectiveApi} from '../utils/api';
 import {Spinner} from '../components';
 import {autobind, isVisible} from '../utils/helper';
+import {
+  BaseSchema,
+  SchemaApi,
+  SchemaCollection,
+  SchemaExpression,
+  SchemaMessage,
+  SchemaName
+} from '../Schema';
 
-export interface ServiceProps extends RendererProps {
-  api?: Api;
-  schemaApi?: Api;
+/**
+ * Service 服务类控件。
+ * 文档：https://baidu.gitee.io/amis/docs/components/service
+ */
+export interface ServiceSchema extends BaseSchema {
+  /**
+   * 指定为 Service 数据拉取控件。
+   */
+  type: 'service';
+
+  /**
+   * 页面初始化的时候，可以设置一个 API 让其取拉取，发送数据会携带当前 data 数据（包含地址栏参数），获取得数据会合并到 data 中，供组件内使用。
+   */
+  api?: SchemaApi;
+
+  /**
+   * WebScocket 地址，用于实时获取数据
+   */
+  ws?: string;
+
+  /**
+   * 内容区域
+   */
+  body?: SchemaCollection;
+
+  /**
+   * @deprecated 改成 api 的 sendOn。
+   */
+  fetchOn?: SchemaExpression;
+
+  /**
+   * 是否默认就拉取？
+   */
   initFetch?: boolean;
-  initFetchOn?: string;
+
+  /**
+   * 是否默认就拉取？通过表达式来决定.
+   *
+   * @deprecated 改成 api 的 sendOn。
+   */
+  initFetchOn?: SchemaExpression;
+
+  /**
+   * 用来获取远程 Schema 的 api
+   */
+  schemaApi?: SchemaApi;
+
+  /**
+   * 是否默认加载 schemaApi
+   */
   initFetchSchema?: boolean;
+
+  /**
+   * 用表达式来配置。
+   * @deprecated 改成 api 的 sendOn。
+   */
+  initFetchSchemaOn?: SchemaExpression;
+
+  /**
+   * 是否轮询拉取
+   */
   interval?: number;
+
+  /**
+   * 是否静默拉取
+   */
   silentPolling?: boolean;
-  stopAutoRefreshWhen?: string;
+
+  /**
+   * 关闭轮询的条件。
+   */
+  stopAutoRefreshWhen?: SchemaExpression;
+
+  messages?: SchemaMessage;
+
+  name?: SchemaName;
+}
+
+export interface ServiceProps
+  extends RendererProps,
+    Omit<ServiceSchema, 'type' | 'className'> {
   store: IServiceStore;
-  body?: SchemaNode;
-  messages: {
-    fetchSuccess?: string;
-    fetchFailed?: string;
-  };
+  messages: SchemaMessage;
 }
 export default class Service extends React.Component<ServiceProps> {
   timer: NodeJS.Timeout;
   mounted: boolean;
 
+  // 主要是用于关闭 socket
+  socket: any;
+
   static defaultProps: Partial<ServiceProps> = {
     messages: {
-      fetchFailed: '初始化失败'
+      fetchFailed: 'fetchFailed'
     }
   };
 
@@ -47,6 +126,8 @@ export default class Service extends React.Component<ServiceProps> {
     this.reload = this.reload.bind(this);
     this.silentReload = this.silentReload.bind(this);
     this.initInterval = this.initInterval.bind(this);
+    this.afterDataFetch = this.afterDataFetch.bind(this);
+    this.afterSchemaFetch = this.afterSchemaFetch.bind(this);
   }
 
   componentDidMount() {
@@ -58,9 +139,7 @@ export default class Service extends React.Component<ServiceProps> {
     const props = this.props;
     const store = props.store;
 
-    const {
-      messages: {fetchSuccess, fetchFailed}
-    } = props;
+    const {fetchSuccess, fetchFailed} = props.messages!;
 
     isApiOutdated(prevProps.api, props.api, prevProps.data, props.data) &&
       store
@@ -68,7 +147,7 @@ export default class Service extends React.Component<ServiceProps> {
           successMessage: fetchSuccess,
           errorMessage: fetchFailed
         })
-        .then(this.initInterval);
+        .then(this.afterDataFetch);
 
     isApiOutdated(
       prevProps.schemaApi,
@@ -81,12 +160,22 @@ export default class Service extends React.Component<ServiceProps> {
           successMessage: fetchSuccess,
           errorMessage: fetchFailed
         })
-        .then(this.initInterval);
+        .then(this.afterSchemaFetch);
+
+    if (props.ws && prevProps.ws !== props.ws) {
+      if (this.socket) {
+        this.socket.close();
+      }
+      this.socket = store.fetchWSData(props.ws, this.afterDataFetch);
+    }
   }
 
   componentWillUnmount() {
     this.mounted = false;
     clearTimeout(this.timer);
+    if (this.socket && this.socket.close) {
+      this.socket.close();
+    }
   }
 
   @autobind
@@ -95,6 +184,7 @@ export default class Service extends React.Component<ServiceProps> {
       schemaApi,
       initFetchSchema,
       api,
+      ws,
       initFetch,
       initFetchOn,
       store,
@@ -102,10 +192,12 @@ export default class Service extends React.Component<ServiceProps> {
     } = this.props;
 
     if (isEffectiveApi(schemaApi, store.data, initFetchSchema)) {
-      store.fetchSchema(schemaApi, store.data, {
-        successMessage: fetchSuccess,
-        errorMessage: fetchFailed
-      });
+      store
+        .fetchSchema(schemaApi, store.data, {
+          successMessage: fetchSuccess,
+          errorMessage: fetchFailed
+        })
+        .then(this.afterSchemaFetch);
     }
 
     if (isEffectiveApi(api, store.data, initFetch, initFetchOn)) {
@@ -114,19 +206,33 @@ export default class Service extends React.Component<ServiceProps> {
           successMessage: fetchSuccess,
           errorMessage: fetchFailed
         })
-        .then(this.initInterval);
+        .then(this.afterDataFetch);
     }
+
+    if (ws) {
+      this.socket = store.fetchWSData(ws, this.afterDataFetch);
+    }
+  }
+
+  afterDataFetch(data: any) {
+    this.initInterval(data);
+  }
+
+  afterSchemaFetch(schema: any) {
+    this.initInterval(schema);
   }
 
   initInterval(value: any) {
     const {interval, silentPolling, stopAutoRefreshWhen, data} = this.props;
+
+    clearTimeout(this.timer);
 
     interval &&
       this.mounted &&
       (!stopAutoRefreshWhen || !evalExpression(stopAutoRefreshWhen, data)) &&
       (this.timer = setTimeout(
         silentPolling ? this.silentReload : this.reload,
-        Math.max(interval, 3000)
+        Math.max(interval, 1000)
       ));
     return value;
   }
@@ -154,7 +260,7 @@ export default class Service extends React.Component<ServiceProps> {
           successMessage: fetchSuccess,
           errorMessage: fetchFailed
         })
-        .then(this.initInterval);
+        .then(this.afterSchemaFetch);
     }
 
     if (isEffectiveApi(api, store.data)) {
@@ -164,7 +270,7 @@ export default class Service extends React.Component<ServiceProps> {
           successMessage: fetchSuccess,
           errorMessage: fetchFailed
         })
-        .then(this.initInterval);
+        .then(this.afterDataFetch);
     }
   }
 
@@ -180,7 +286,11 @@ export default class Service extends React.Component<ServiceProps> {
   }
 
   handleQuery(query: any) {
-    this.receive(query);
+    if (this.props.api || this.props.schemaApi) {
+      this.receive(query);
+    } else {
+      this.props.onQuery?.(query);
+    }
   }
 
   reloadTarget(target: string, data?: any) {
@@ -222,7 +332,9 @@ export default class Service extends React.Component<ServiceProps> {
           successMessage: __(action.messages && action.messages.success),
           errorMessage: __(action.messages && action.messages.failed)
         })
-        .then(async () => {
+        .then(async (payload: any) => {
+          this.afterDataFetch(payload);
+
           if (action.feedback && isVisible(action.feedback, store.data)) {
             await this.openFeedback(action.feedback, store.data);
           }

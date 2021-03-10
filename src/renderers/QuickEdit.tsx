@@ -18,11 +18,56 @@ import matches from 'dom-helpers/query/matches';
 import Overlay from '../components/Overlay';
 import PopOver from '../components/PopOver';
 import {Icon} from '../components/icons';
+import {FormControlSchema} from './Form/Item';
 
-export interface QuickEditConfig {}
+export type SchemaQuickEditObject =
+  /**
+   * 直接就是个表单项
+   */
+  | ({
+      /**
+       * 是否立即保存
+       */
+      saveImmediately?: boolean;
+
+      /**
+       * 接口保存失败后，是否重置组件编辑状态
+       */
+      resetOnFailed?: boolean;
+
+      /**
+       * 是否直接内嵌
+       */
+      mode?: 'inline';
+    } & FormControlSchema)
+
+  /**
+   * 表单项集合
+   */
+  | {
+      /**
+       * 是否立即保存
+       */
+      saveImmediately?: boolean;
+
+      /**
+       * 接口保存失败后，是否重置组件编辑状态
+       */
+      resetOnFailed?: boolean;
+
+      /**
+       * 是否直接内嵌
+       */
+      mode?: 'inline';
+
+      controls: Array<FormControlSchema>;
+    };
+
+export type SchemaQuickEdit = boolean | SchemaQuickEditObject;
 
 export interface QuickEditConfig {
   saveImmediately?: boolean;
+  resetOnFailed?: boolean;
   mode?: 'inline' | 'dialog' | 'popOver' | 'append';
   type?: string;
   controls?: any;
@@ -261,7 +306,12 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
       const {onQuickChange, quickEdit} = this.props;
 
       this.closeQuickEdit();
-      onQuickChange(values, (quickEdit as QuickEditConfig).saveImmediately);
+      onQuickChange(
+        values,
+        (quickEdit as QuickEditConfig).saveImmediately,
+        false,
+        (quickEdit as QuickEditConfig).resetOnFailed
+      );
     }
 
     handleInit(values: object) {
@@ -272,7 +322,12 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
     handleChange(values: object) {
       const {onQuickChange, quickEdit} = this.props;
 
-      onQuickChange(values, (quickEdit as QuickEditConfig).saveImmediately);
+      onQuickChange(
+        values,
+        (quickEdit as QuickEditConfig).saveImmediately,
+        false,
+        (quickEdit as QuickEditConfig).resetOnFailed
+      );
     }
 
     openQuickEdit() {
@@ -335,11 +390,8 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
           schema = {
             title: '',
             autoFocus: (quickEdit as QuickEditConfig).mode !== 'inline',
-            mode:
-              (quickEdit as QuickEditConfig).mode === 'inline'
-                ? 'inline'
-                : 'normal',
             ...quickEdit,
+            mode: 'noraml',
             type: 'form'
           };
         } else {
@@ -348,15 +400,13 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
             className: quickEdit.formClassName,
             type: 'form',
             autoFocus: (quickEdit as QuickEditConfig).mode !== 'inline',
-            mode:
-              (quickEdit as QuickEditConfig).mode === 'inline'
-                ? 'inline'
-                : 'normal',
+            mode: 'normal',
             controls: [
               {
                 type: quickEdit.type || 'text',
                 name: quickEdit.name || name,
-                ...quickEdit
+                ...quickEdit,
+                mode: undefined
               }
             ]
           };
@@ -373,12 +423,12 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
               : [
                   {
                     type: 'button',
-                    label: __('取消'),
+                    label: __('cancle'),
                     actionType: 'cancel'
                   },
 
                   {
-                    label: __('确认'),
+                    label: __('confirm'),
                     type: 'submit',
                     primary: true
                   }
@@ -407,7 +457,8 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
         render,
         popOverContainer,
         classPrefix: ns,
-        classnames: cx
+        classnames: cx,
+        canAccessSuperData
       } = this.props;
 
       const content = (
@@ -419,8 +470,10 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
             onSubmit: this.handleSubmit,
             onAction: this.handleAction,
             onChange: null,
+            formLazyChange: false,
             ref: this.formRef,
-            popOverContainer: () => this.overlay
+            popOverContainer: () => this.overlay,
+            canAccessSuperData
           })}
         </div>
       );
@@ -458,7 +511,8 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
         className,
         classnames: cx,
         render,
-        noHoc
+        noHoc,
+        canAccessSuperData
       } = this.props;
 
       if (!quickEdit || !onQuickChange || quickEditEnabled === false || noHoc) {
@@ -472,8 +526,11 @@ export const HocQuickEdit = (config: Partial<QuickEditConfig> = {}) => (
               wrapperComponent: 'div',
               className: cx('Form--quickEdit'),
               ref: this.formRef,
+              simpleMode: true,
               onInit: this.handleInit,
-              onChange: this.handleChange
+              onChange: this.handleChange,
+              formLazyChange: false,
+              canAccessSuperData
             })}
           </Component>
         );

@@ -8,13 +8,152 @@ import Checkbox from '../components/Checkbox';
 import {IItem} from '../store/list';
 import {padArr, isVisible, isDisabled, noop} from '../utils/helper';
 import {resolveVariable} from '../utils/tpl-builtin';
-import QuickEdit from './QuickEdit';
-import PopOver from './PopOver';
+import QuickEdit, {SchemaQuickEdit} from './QuickEdit';
+import PopOver, {SchemaPopOver} from './PopOver';
 import {TableCell} from './Table';
-import Copyable from './Copyable';
+import Copyable, {SchemaCopyable} from './Copyable';
 import {Icon} from '../components/icons';
+import {
+  BaseSchema,
+  SchemaClassName,
+  SchemaCollection,
+  SchemaExpression,
+  SchemaObject,
+  SchemaTpl,
+  SchemaUrlPath
+} from '../Schema';
+import {ActionSchema} from './Action';
 
-export interface CardProps extends RendererProps {
+export type CardBodyField = SchemaObject & {
+  /**
+   * 列标题
+   */
+  label: string;
+
+  /**
+   * label 类名
+   */
+  labelClassName?: SchemaClassName;
+
+  /**
+   * 绑定字段名
+   */
+  name?: string;
+
+  /**
+   * 配置查看详情功能
+   */
+  popOver?: SchemaPopOver;
+
+  /**
+   * 配置快速编辑功能
+   */
+  quickEdit?: SchemaQuickEdit;
+
+  /**
+   * 配置点击复制功能
+   */
+  copyable?: SchemaCopyable;
+};
+
+/**
+ * Card 卡片渲染器。
+ * 文档：https://baidu.gitee.io/amis/docs/components/card
+ */
+export interface CardSchema extends BaseSchema {
+  /**
+   * 指定为 card 类型
+   */
+  type: 'card';
+
+  /**
+   * 头部配置
+   */
+  header?: {
+    className?: SchemaClassName;
+
+    /**
+     * 标题
+     */
+    title?: SchemaTpl;
+    titleClassName?: string;
+
+    /**
+     * 副标题
+     */
+    subTitle?: SchemaTpl;
+    subTitleClassName?: SchemaClassName;
+    subTitlePlaceholder?: string;
+
+    /**
+     * 描述
+     */
+    description?: SchemaTpl;
+
+    /**
+     * 描述占位内容
+     */
+    descriptionPlaceholder?: string;
+
+    /**
+     * 描述占位类名
+     */
+    descriptionClassName?: string;
+
+    /**
+     * @deprecated 建议用 description
+     */
+    desc?: SchemaTpl;
+
+    /**
+     * @deprecated 建议用 descriptionPlaceholder
+     */
+    descPlaceholder?: SchemaTpl;
+
+    /**
+     * @deprecated 建议用 descriptionClassName
+     */
+    descClassName?: SchemaClassName;
+
+    /**
+     * 图片地址
+     */
+    avatar?: SchemaUrlPath;
+
+    avatarText?: SchemaTpl;
+    avatarTextClassName?: SchemaClassName;
+
+    /**
+     * 图片包括层类名
+     */
+    avatarClassName?: SchemaClassName;
+
+    /**
+     * 图片类名。
+     */
+    imageClassName?: SchemaClassName;
+
+    /**
+     * 是否点亮
+     */
+    highlight?: SchemaExpression;
+    highlightClassName?: SchemaClassName;
+  };
+
+  /**
+   * 内容区域
+   */
+  body?: Array<CardBodyField>;
+
+  /**
+   * 底部按钮集合。
+   */
+  actions?: Array<ActionSchema>;
+}
+
+export interface CardProps
+  extends RendererProps,
+    Omit<CardSchema, 'className'> {
   onCheck: (item: IItem) => void;
   itemIndex?: number;
   multiple?: boolean;
@@ -36,7 +175,6 @@ export class Card extends React.Component<CardProps> {
   };
 
   static propsList: Array<string> = [
-    'multiple',
     'avatarClassName',
     'bodyClassName',
     'actionsCount',
@@ -89,10 +227,12 @@ export class Card extends React.Component<CardProps> {
   handleQuickChange(
     values: object,
     saveImmediately?: boolean,
-    savePristine?: boolean
+    savePristine?: boolean,
+    resetOnFailed?: boolean
   ) {
     const {onQuickChange, item} = this.props;
-    onQuickChange && onQuickChange(item, values, saveImmediately, savePristine);
+    onQuickChange &&
+      onQuickChange(item, values, saveImmediately, savePristine, resetOnFailed);
   }
 
   getPopOverContainer() {
@@ -299,16 +439,18 @@ export class Card extends React.Component<CardProps> {
         title: titleTpl,
         subTitle: subTitleTpl,
         subTitlePlaceholder,
-        desc: descTpl,
-        descPlaceholder
+        desc: descTpl
       } = header;
 
-      const highlight = !!evalExpression(highlightTpl, data as object);
+      const descPlaceholder =
+        header.descriptionPlaceholder || header.descPlaceholder;
+
+      const highlight = !!evalExpression(highlightTpl!, data as object);
       const avatar = filter(avatarTpl, data, '| raw');
       const avatarText = filter(avatarTextTpl, data);
       const title = filter(titleTpl, data);
       const subTitle = filter(subTitleTpl, data);
-      const desc = filter(descTpl, data);
+      const desc = filter(header.description || descTpl, data);
 
       heading = (
         <div className={cx('Card-heading', header.className)}>
@@ -365,7 +507,7 @@ export class Card extends React.Component<CardProps> {
                   header.subTitleClassName || subTitleClassName
                 )}
               >
-                {render('sub-title', subTitle || subTitlePlaceholder, {
+                {render('sub-title', subTitle || subTitlePlaceholder!, {
                   className: cx(!subTitle ? 'Card-placeholder' : undefined)
                 })}
               </div>
@@ -375,10 +517,12 @@ export class Card extends React.Component<CardProps> {
               <div
                 className={cx(
                   'Card-desc',
-                  header.descClassName || descClassName
+                  header.descriptionClassName ||
+                    header.descClassName ||
+                    descClassName
                 )}
               >
-                {render('desc', desc || descPlaceholder, {
+                {render('desc', desc || descPlaceholder!, {
                   className: !desc ? 'text-muted' : undefined
                 })}
               </div>
@@ -410,7 +554,9 @@ export class Card extends React.Component<CardProps> {
   test: /(^|\/)card$/,
   name: 'card'
 })
-export class CardRenderer extends Card {}
+export class CardRenderer extends Card {
+  static propsList = ['multiple', ...Card.propsList];
+}
 
 @Renderer({
   test: /(^|\/)card-item-field$/,
@@ -427,13 +573,16 @@ export class CardItemFieldRenderer extends TableCell {
 
   static propsList = [
     'quickEdit',
+    'quickEditEnabledOn',
     'popOver',
     'copyable',
+    'inline',
     ...TableCell.propsList
   ];
 
   render() {
     let {
+      type,
       className,
       render,
       style,

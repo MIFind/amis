@@ -5,21 +5,107 @@ import {ClassNamesFn, themeable, ThemeProps} from '../theme';
 import {autobind} from '../utils/helper';
 import {Icon} from '../components/icons';
 import {LocaleProps, localeable} from '../locale';
+import {BaseSchema, SchemaClassName, SchemaTpl, SchemaUrlPath} from '../Schema';
 
-export interface ImageThumbProps extends LocaleProps, ThemeProps {
-  src: string;
-  originalSrc?: string; // 原图
+/**
+ * 图片展示控件。
+ * 文档：https://baidu.gitee.io/amis/docs/components/image
+ */
+export interface ImageSchema extends BaseSchema {
+  /**
+   * 指定为图片展示类型
+   */
+  type: 'image' | 'static-image';
+
+  /**
+   * 默认图片地址
+   */
+  defaultImage?: SchemaUrlPath;
+
+  /**
+   * 图片标题
+   */
+  title?: SchemaTpl;
+
+  /**
+   * 关联字段名，也可以直接配置 src
+   */
+  name?: string;
+
+  /**
+   * 图片描述信息
+   */
+  imageCaption?: SchemaTpl;
+
+  /**
+   * 图片地址，如果配置了 name，这个属性不用配置。
+   */
+  src?: SchemaUrlPath;
+
+  /**
+   * 大图地址，不设置用 src
+   */
+  originalSrc?: SchemaUrlPath;
+
+  /**
+   * 是否启动放大功能。
+   */
   enlargeAble?: boolean;
-  onEnlarge?: (info: ImageThumbProps) => void;
+
+  /**
+   * 是否显示尺寸。
+   */
   showDimensions?: boolean;
-  title?: string;
+
+  /**
+   * 图片无法显示时的替换文本
+   */
   alt?: string;
-  index?: number;
-  className?: string;
-  imageClassName?: string;
-  caption?: string;
+
+  /**
+   * 高度
+   */
+  height?: number;
+
+  /**
+   * 宽度
+   */
+  width?: number;
+
+  /**
+   * 图片 css 类名
+   */
+  imageClassName?: SchemaClassName;
+
+  /**
+   * 外层 css 类名
+   */
+  className?: SchemaClassName;
+
+  /**
+   * 图片缩率图外层 css 类名
+   */
+  thumbClassName?: SchemaClassName;
+
+  caption?: SchemaTpl;
+
+  /**
+   * 预览图模式
+   */
   thumbMode?: 'w-full' | 'h-full' | 'contain' | 'cover';
+
+  /**
+   * 预览图比率
+   */
   thumbRatio?: '1:1' | '4:3' | '16:9';
+}
+
+export interface ImageThumbProps
+  extends LocaleProps,
+    ThemeProps,
+    Omit<ImageSchema, 'type' | 'className'> {
+  onEnlarge?: (info: ImageThumbProps) => void;
+  index?: number;
   onLoad?: React.EventHandler<any>;
 }
 
@@ -35,8 +121,11 @@ export class ImageThumb extends React.Component<ImageThumbProps> {
       classnames: cx,
       className,
       imageClassName,
+      thumbClassName,
       thumbMode,
       thumbRatio,
+      height,
+      width,
       src,
       alt,
       title,
@@ -51,9 +140,11 @@ export class ImageThumb extends React.Component<ImageThumbProps> {
         <div
           className={cx(
             'Image-thumb',
+            thumbClassName,
             thumbMode ? `Image-thumb--${thumbMode}` : '',
             thumbRatio ? `Image-thumb--${thumbRatio.replace(/:/g, '-')}` : ''
           )}
+          style={{height: height, width: width}}
         >
           <img
             onLoad={onLoad}
@@ -65,7 +156,7 @@ export class ImageThumb extends React.Component<ImageThumbProps> {
           {enlargeAble ? (
             <div key="overlay" className={cx('Image-overlay')}>
               <a
-                data-tooltip={__('查看大图')}
+                data-tooltip={__('Image.zoomIn')}
                 data-position="bottom"
                 target="_blank"
                 onClick={this.handleEnlarge}
@@ -89,6 +180,9 @@ export class ImageThumb extends React.Component<ImageThumbProps> {
 }
 const ThemedImageThumb = themeable(localeable(ImageThumb));
 export default ThemedImageThumb;
+
+export const imagePlaceholder =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAMAAAAKE/YAAAAAP1BMVEXp7vG6vsHo7fC3ur7s8fXr8PO1uLy8wMO5vcDL0NLN0dXl6u3T19vHy86+wsXO0tbQ1djc4eTh5ejBxcjZ3eD/ULOKAAACiklEQVR42u3a2YrjMBCF4arSVrYTL3Le/1lHXqbdPTZDWheRDOcLAZGrnyLgRSIAAAAAAAAAAAAAAAAAAAAAAAAAAAD4IrmoGBHKVSxbyFEm56hMtRBN7TNPO1GRaiFpvDd5vG+lQLUQNT6EwDlCYD+4AtF2Ug4mkzKb+PFqITf6oP3wyDEEZTPaz0dT63s/2DxPw6YtFT2S7Lr0eZtrSkYP64pShrXWyZsVhaNHt6xScjdNUSy9lyG2fLTYbpyZw/NFJDeJFhdnb4wab1ohuUc0dbPnwMxB/WhFbhFtR8+boBwvSkSktmiS2fDu8oohzoqQ1BQtLgY9oht3HutrXKvrjX4SyekexTys1DVp6vojeimRf5t1ra5p0lvBTvVlz83MW3VV0TF1bfwsJOfmv9UVRYt9eN2a++gumo/qeqJJ3Ks3i+dl81FNUk90ipDX0I4TfW+WvflndT3R6WsTJ/9r3qvriSb569x8VPNaXU/0149y0XxU+4cjqSpaZK8+mq+rK4pOofE5WZFT86m6omjbzT4s1UfzZXVFf4+1uTc82aWZTeArGkzoXC3R25w1LNX2lZqVr2lfPnpZHc3MqTpOejSfmAqiHcn35kRDCk8qnnSKPpo3qqx1R6fV3swHrX/SazP/UHl0Wrml+VbRTmhpvlu0i6o3jA6IPlQTHWqJZqNv4ypumFJ0z+FtPc8VRJNI9zvln1wytrhrenLZ3GGjqHWW3O/tm5+Ftpm5Gdrht9qh2V6CCH2Y2KgmsM9imFWj+3w00eiVQx5eN8Lo44RkVJOLR5IyR2tcHJs8Y7SlDjGJtS6PteWOi53d4WQe3a8YAAAAAAAAAAAAAAAAAAAAAAAAAACgNn8AGA09DkR51CoAAAAASUVORK5CYII=';
 
 export interface ImageFieldProps extends RendererProps {
   className?: string;
@@ -120,8 +214,7 @@ export class ImageField extends React.Component<ImageFieldProps, object> {
     ImageFieldProps,
     'defaultImage' | 'thumbMode' | 'thumbRatio' | 'placeholder'
   > = {
-    defaultImage:
-      'https://fex.bdstatic.com/n/static/amis/renderers/crud/field/placeholder_cfad9b1.png',
+    defaultImage: imagePlaceholder,
     thumbMode: 'contain',
     thumbRatio: '1:1',
     placeholder: '-'
@@ -141,8 +234,8 @@ export class ImageField extends React.Component<ImageFieldProps, object> {
     onImageEnlarge &&
       onImageEnlarge(
         {
-          src,
-          originalSrc: originalSrc || src,
+          src: src!,
+          originalSrc: originalSrc || src!,
           title: enlargeTitle || title,
           caption: enlargeCaption || caption,
           thumbMode,
@@ -160,6 +253,9 @@ export class ImageField extends React.Component<ImageFieldProps, object> {
       title,
       data,
       imageClassName,
+      thumbClassName,
+      height,
+      width,
       classnames: cx,
       src,
       thumbMode,
@@ -178,6 +274,9 @@ export class ImageField extends React.Component<ImageFieldProps, object> {
         {value ? (
           <ThemedImageThumb
             imageClassName={imageClassName}
+            thumbClassName={thumbClassName}
+            height={height}
+            width={width}
             src={value}
             title={filter(title, data)}
             caption={filter(imageCaption, data)}

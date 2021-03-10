@@ -105,6 +105,7 @@ export class AssociatedCheckboxes extends BaseCheckboxes<
       onChange,
       columns,
       value,
+      disabled,
       leftMode,
       cellRender
     } = this.props;
@@ -124,6 +125,7 @@ export class AssociatedCheckboxes extends BaseCheckboxes<
               option2value={this.leftOption2Value}
               options={leftOptions}
               value={this.state.leftValue}
+              disabled={disabled}
               onChange={this.handleLeftSelect}
               showRadio={false}
             />
@@ -132,6 +134,7 @@ export class AssociatedCheckboxes extends BaseCheckboxes<
               option2value={this.leftOption2Value}
               options={leftOptions}
               value={this.state.leftValue}
+              disabled={disabled}
               onChange={this.handleLeftSelect}
               showRadio={false}
             />
@@ -157,15 +160,16 @@ export class AssociatedCheckboxes extends BaseCheckboxes<
                   </div>
 
                   {selectdOption.loading ? (
-                    <p>{__('加载中')}</p>
+                    <p>{__('loading')}</p>
                   ) : (
-                    <p>{__('点击刷新重新加载')}</p>
+                    <p>{__('Transfer.refreshIcon')}</p>
                   )}
                 </div>
               ) : rightMode === 'table' ? (
                 <TableCheckboxes
                   columns={columns!}
                   value={value}
+                  disabled={disabled}
                   options={selectdOption.children || []}
                   onChange={onChange}
                   option2value={option2value}
@@ -174,6 +178,7 @@ export class AssociatedCheckboxes extends BaseCheckboxes<
               ) : rightMode === 'tree' ? (
                 <TreeCheckboxes
                   value={value}
+                  disabled={disabled}
                   options={selectdOption.children || []}
                   onChange={onChange}
                   option2value={option2value}
@@ -181,6 +186,7 @@ export class AssociatedCheckboxes extends BaseCheckboxes<
               ) : rightMode === 'chained' ? (
                 <ChainedCheckboxes
                   value={value}
+                  disabled={disabled}
                   options={selectdOption.children || []}
                   onChange={onChange}
                   option2value={option2value}
@@ -188,6 +194,7 @@ export class AssociatedCheckboxes extends BaseCheckboxes<
               ) : (
                 <ListCheckboxes
                   value={value}
+                  disabled={disabled}
                   options={selectdOption.children || []}
                   onChange={onChange}
                   option2value={option2value}
@@ -195,12 +202,12 @@ export class AssociatedCheckboxes extends BaseCheckboxes<
               )
             ) : (
               <div className={cx('AssociatedCheckboxes-box')}>
-                {__('配置错误，选项无法与左侧选项对应')}
+                {__('Transfer.configError')}
               </div>
             )
           ) : (
             <div className={cx('AssociatedCheckboxes-box')}>
-              {__('请先选择左侧数据')}
+              {__('Transfer.selectFromLeft')}
             </div>
           )}
         </div>

@@ -2,7 +2,6 @@ import React from 'react';
 import {findDOMNode} from 'react-dom';
 import {Renderer, RendererProps} from '../factory';
 import {SchemaNode, Action, Schema} from '../types';
-import cx from 'classnames';
 import Button from '../components/Button';
 import {ListStore, IListStore, IItem} from '../store/list';
 import {observer} from 'mobx-react';
@@ -15,27 +14,130 @@ import {
 import {resolveVariable} from '../utils/tpl-builtin';
 import Sortable from 'sortablejs';
 import {filter} from '../utils/tpl';
-import debounce from 'lodash/debounce';
-import {resizeSensor} from '../utils/resize-sensor';
 import {Icon} from '../components/icons';
+import {
+  BaseSchema,
+  SchemaClassName,
+  SchemaCollection,
+  SchemaExpression,
+  SchemaTpl,
+  SchemaTokenizeableString
+} from '../Schema';
+import {CardSchema} from './Card';
+
+/**
+ * Cards 卡片集合渲染器。
+ * 文档：https://baidu.gitee.io/amis/docs/components/card
+ */
+export interface CardsSchema extends BaseSchema {
+  /**
+   * 指定为 cards 类型
+   */
+  type: 'cards';
+
+  card?: Omit<CardSchema, 'type'>;
+
+  /**
+   * 头部 CSS 类名
+   */
+  headerClassName?: SchemaClassName;
+
+  /**
+   * 底部 CSS 类名
+   */
+  footerClassName?: SchemaClassName;
+
+  /**
+   * 卡片 CSS 类名
+   *
+   * @default Grid-col--sm6 Grid-col--md4 Grid-col--lg3
+   */
+  itemClassName?: SchemaClassName;
+
+  /**
+   * 无数据提示
+   *
+   * @default 暂无数据
+   */
+  placeholder?: SchemaTpl;
+
+  /**
+   * 是否显示底部
+   */
+  showFooter?: boolean;
+
+  /**
+   * 是否显示头部
+   */
+  showHeader?: boolean;
+
+  /**
+   * 数据源: 绑定当前环境变量
+   *
+   * @default ${items}
+   */
+  source?: SchemaTokenizeableString;
+
+  /**
+   * 标题
+   */
+  title?: SchemaTpl;
+
+  /**
+   * 是否隐藏勾选框
+   */
+  hideCheckToggler?: boolean;
+
+  /**
+   * 是否固顶
+   */
+  affixHeader?: boolean;
+
+  /**
+   * 顶部区域
+   */
+  header?: SchemaCollection;
+
+  /**
+   * 底部区域
+   */
+  footer?: SchemaCollection;
+
+  /**
+   * 配置某项是否可以点选
+   */
+  itemCheckableOn?: SchemaExpression;
+
+  /**
+   * 配置某项是否可拖拽排序，前提是要开启拖拽功能
+   */
+  itemDraggableOn?: SchemaExpression;
+
+  /**
+   * 点击卡片的时候是否勾选卡片。
+   */
+  checkOnItemClick?: boolean;
+
+  /**
+   * 是否为瀑布流布局？
+   */
+  masonryLayout?: boolean;
+
+  /**
+   * 可以用来作为值的字段
+   */
+  valueField?: string;
+}
 
 export interface Column {
   type: string;
   [propName: string]: any;
 }
 
-export interface GridProps extends RendererProps {
-  title?: string; // 标题
-  header?: SchemaNode;
-  body?: SchemaNode;
-  footer?: SchemaNode;
+export interface GridProps
+  extends RendererProps,
+    Omit<CardsSchema, 'className' | 'itemClassName'> {
   store: IListStore;
-  className?: string;
-  headerClassName?: string;
-  footerClassName?: string;
-  itemClassName?: string;
-  card?: any;
-  source?: string;
   selectable?: boolean;
   selected?: Array<any>;
   multiple?: boolean;
@@ -50,15 +152,11 @@ export interface GridProps extends RendererProps {
     diff: Array<object> | object,
     rowIndexes: Array<number> | number,
     unModifiedItems?: Array<object>,
-    rowOrigins?: Array<object> | object
+    rowOrigins?: Array<object> | object,
+    resetOnFailed?: boolean
   ) => void;
   onSaveOrder?: (moved: Array<object>, items: Array<object>) => void;
   onQuery: (values: object) => void;
-  hideCheckToggler?: boolean;
-  itemCheckableOn?: string;
-  itemDraggableOn?: string;
-  checkOnItemClick?: boolean;
-  masonryLayout?: boolean;
 }
 
 export default class Cards extends React.Component<GridProps, object> {
@@ -83,7 +181,7 @@ export default class Cards extends React.Component<GridProps, object> {
   ];
   static defaultProps: Partial<GridProps> = {
     className: '',
-    placeholder: '没有数据',
+    placeholder: 'placeholder.noData',
     source: '$items',
     selectable: false,
     headerClassName: '',
@@ -266,6 +364,8 @@ export default class Cards extends React.Component<GridProps, object> {
       // this.unSensor = resizeSensor(ref.parentNode as HTMLElement, this.fixAlignmentLazy);
     } else {
       this.unSensor && this.unSensor();
+
+      // @ts-ignore;
       delete this.unSensor;
     }
   }
@@ -278,7 +378,8 @@ export default class Cards extends React.Component<GridProps, object> {
     const ns = this.props.classPrefix;
     const dom = findDOMNode(this) as HTMLElement;
     const clip = (this.body as HTMLElement).getBoundingClientRect();
-    const offsetY = this.props.env.affixOffsetTop || 0;
+    const offsetY =
+      this.props.affixOffsetTop ?? this.props.env.affixOffsetTop ?? 0;
     const affixed = clip.top < offsetY && clip.top + clip.height - 40 > offsetY;
     const afixedDom = dom.querySelector(`.${ns}Cards-fixedTop`) as HTMLElement;
 
@@ -321,7 +422,8 @@ export default class Cards extends React.Component<GridProps, object> {
     item: IItem,
     values: object,
     saveImmediately?: boolean | any,
-    saveSilent?: boolean
+    saveSilent?: boolean,
+    resetOnFailed?: boolean
   ) {
     item.change(values, saveSilent);
 
@@ -352,7 +454,8 @@ export default class Cards extends React.Component<GridProps, object> {
       difference(item.data, item.pristine, ['id', primaryField]),
       item.index,
       undefined,
-      item.pristine
+      item.pristine,
+      resetOnFailed
     );
   }
 
@@ -605,7 +708,7 @@ export default class Cards extends React.Component<GridProps, object> {
           {child}
           {store.dragging ? (
             <div className={cx('Cards-dragTip')} ref={this.dragTipRef}>
-              {__('请拖动顶部的按钮进行排序')}
+              {__('Card.dragTip')}
             </div>
           ) : null}
         </div>
@@ -703,7 +806,7 @@ export default class Cards extends React.Component<GridProps, object> {
       <Button
         iconOnly
         key="dragging-toggle"
-        tooltip={__('对卡片进行排序操作')}
+        tooltip={__('Card.toggleDrag')}
         tooltipContainer={
           env && env.getModalContainer ? env.getModalContainer : undefined
         }
@@ -805,6 +908,7 @@ export default class Cards extends React.Component<GridProps, object> {
                   {render(
                     `${index}`,
                     {
+                      // @ts-ignore
                       type: 'card',
                       ...card
                     },
@@ -839,7 +943,7 @@ export default class Cards extends React.Component<GridProps, object> {
           </div>
         ) : (
           <div className={cx('Cards-placeholder')}>
-            {filter(__(placeholder), data)}
+            {render('placeholder', __(placeholder))}
           </div>
         )}
 

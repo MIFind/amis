@@ -13,8 +13,8 @@ export interface ResultBoxProps
     Omit<InputBoxProps, 'result' | 'prefix' | 'onChange' | 'translate'> {
   onChange?: (value: string) => void;
   onResultClick?: (e: React.MouseEvent<HTMLElement>) => void;
-  result?: Array<any>;
-  itemRender: (value: any) => JSX.Element;
+  result?: Array<any> | any;
+  itemRender: (value: any) => JSX.Element | string;
   onResultChange?: (value: Array<any>) => void;
   allowInput?: boolean;
   inputPlaceholder: string;
@@ -26,8 +26,8 @@ export class ResultBox extends React.Component<ResultBoxProps> {
     'clearable' | 'placeholder' | 'itemRender' | 'inputPlaceholder'
   > = {
     clearable: false,
-    placeholder: '暂无结果',
-    inputPlaceholder: '手动输入内容',
+    placeholder: 'placeholder.noData',
+    inputPlaceholder: 'placeholder.enter',
     itemRender: (option: any) => (
       <span>{`${option.scopeLabel || ''}${option.label}`}</span>
     )
@@ -36,6 +36,16 @@ export class ResultBox extends React.Component<ResultBoxProps> {
   state = {
     isFocused: false
   };
+
+  inputRef: React.RefObject<any> = React.createRef();
+
+  focus() {
+    this.inputRef.current?.focus();
+  }
+
+  blur() {
+    this.inputRef.current?.blur();
+  }
 
   @autobind
   clearValue(e: React.MouseEvent<any>) {
@@ -100,6 +110,9 @@ export class ResultBox extends React.Component<ResultBoxProps> {
       onResultClick,
       translate: __,
       locale,
+      onKeyPress,
+      onFocus,
+      onBlur,
       ...rest
     } = this.props;
     const isFocused = this.state.isFocused;
@@ -111,9 +124,14 @@ export class ResultBox extends React.Component<ResultBoxProps> {
           className,
           isFocused ? 'is-focused' : '',
           disabled ? 'is-disabled' : '',
-          hasError ? 'is-error' : ''
+          hasError ? 'is-error' : '',
+          onResultClick ? 'is-clickable' : ''
         )}
         onClick={onResultClick}
+        tabIndex={!allowInput && !disabled && onFocus ? 0 : -1}
+        onKeyPress={allowInput ? undefined : onKeyPress}
+        onFocus={allowInput ? undefined : onFocus}
+        onBlur={allowInput ? undefined : onBlur}
       >
         {Array.isArray(result) && result.length ? (
           result.map((item, index) => (
@@ -121,46 +139,47 @@ export class ResultBox extends React.Component<ResultBoxProps> {
               <span className={cx('ResultBox-valueLabel')}>
                 {itemRender(item)}
               </span>
-              <a data-index={index} onClick={this.removeItem}>
-                <Icon icon="close" className="icon" />
-              </a>
+              {!disabled ? (
+                <a data-index={index} onClick={this.removeItem}>
+                  <Icon icon="close" className="icon" />
+                </a>
+              ) : null}
             </div>
           ))
-        ) : allowInput ? null : (
+        ) : result && !Array.isArray(result) ? (
+          <span className={cx('ResultBox-singleValue')}>{result}</span>
+        ) : allowInput && !disabled ? null : (
           <span className={cx('ResultBox-placeholder')}>
-            {__(placeholder || '无')}
+            {__(placeholder || 'placeholder.noData')}
           </span>
         )}
 
-        {allowInput ? (
+        {allowInput && !disabled ? (
           <Input
             {...rest}
+            onKeyPress={onKeyPress}
+            ref={this.inputRef}
             value={value || ''}
             onChange={this.handleChange}
-            placeholder={
+            placeholder={__(
               Array.isArray(result) && result.length
                 ? inputPlaceholder
                 : placeholder
-            }
+            )}
             onFocus={this.handleFocus}
             onBlur={this.handleBlur}
           />
-        ) : (
-          <span className={cx('ResultBox-mid')} />
-        )}
-
-        {clearable && !disabled && Array.isArray(result) && result.length ? (
-          <a
-            // data-tooltip="清空"
-            // data-position="bottom"
-            onClick={this.clearValue}
-            className={cx('ResultBox-clear')}
-          >
-            <Icon icon="close" className="icon" />
-          </a>
         ) : null}
 
         {children}
+
+        {clearable &&
+        !disabled &&
+        (Array.isArray(result) ? result.length : result) ? (
+          <a onClick={this.clearValue} className={cx('ResultBox-clear')}>
+            <Icon icon="close" className="icon" />
+          </a>
+        ) : null}
       </div>
     );
   }

@@ -10,12 +10,100 @@ import {findDOMNode} from 'react-dom';
 import {IModalStore, ModalStore} from '../store/modal';
 import {filter} from '../utils/tpl';
 import {Spinner} from '../components';
+import {IServiceStore} from '../store/service';
+import {
+  BaseSchema,
+  SchemaClassName,
+  SchemaCollection,
+  SchemaName
+} from '../Schema';
+import {ActionSchema} from './Action';
 
-export interface DrawerProps extends RendererProps {
-  title?: string; // 标题
-  size?: 'md' | 'lg' | 'xs' | 'sm';
-  position?: 'left' | 'right' | 'top' | 'bottom';
+/**
+ * Drawer 抽出式弹框。
+ * 文档：https://baidu.gitee.io/amis/docs/components/drawer
+ */
+export interface DrawerSchema extends BaseSchema {
+  type: 'drawer';
+
+  /**
+   * 默认不用填写，自动会创建确认和取消按钮。
+   */
+  actions?: Array<ActionSchema>;
+
+  /**
+   * 内容区域
+   */
+  body?: SchemaCollection;
+
+  /**
+   * 配置 Body 容器 className
+   */
+  bodyClassName?: SchemaClassName;
+
+  /**
+   * 是否支持按 ESC 关闭 Dialog
+   */
   closeOnEsc?: boolean;
+
+  name?: SchemaName;
+
+  /**
+   * Dialog 大小
+   */
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'full';
+
+  /**
+   * 请通过配置 title 设置标题
+   */
+  title?: SchemaCollection;
+
+  /**
+   * 从什么位置弹出
+   */
+  position?: 'left' | 'right' | 'top' | 'bottom';
+
+  /**
+   * 头部
+   */
+  header?: SchemaCollection;
+
+  /**
+   * 底部
+   */
+  footer?: SchemaCollection;
+
+  /**
+   * 影响自动生成的按钮，如果自己配置了按钮这个配置无效。
+   */
+  confirm?: boolean;
+
+  /**
+   * 是否可以拖动弹窗大小
+   */
+  resizable?: boolean;
+
+  /**
+   * 是否显示蒙层
+   */
+  overlay?: boolean;
+
+  /**
+   * 点击外部的时候是否关闭弹框。
+   */
+  closeOnOutside?: boolean;
+
+  /**
+   * 是否显示错误信息
+   */
+  showErrorMsg?: boolean;
+}
+
+export type DrawerSchemaBase = Omit<DrawerSchema, 'type'>;
+
+export interface DrawerProps
+  extends RendererProps,
+    Omit<DrawerSchema, 'className'> {
   onClose: () => void;
   onConfirm: (
     values: Array<object>,
@@ -25,16 +113,8 @@ export interface DrawerProps extends RendererProps {
   ) => void;
   children?: React.ReactNode | ((props?: any) => React.ReactNode);
   store: IModalStore;
-  className?: string;
-  header?: SchemaNode;
-  body?: SchemaNode;
-  bodyClassName?: string;
-  footer?: SchemaNode;
-  confirm?: boolean;
+
   show?: boolean;
-  resizable?: boolean;
-  overlay?: boolean;
-  closeOnOutside?: boolean;
   drawerContainer?: () => HTMLElement;
 }
 
@@ -53,7 +133,8 @@ export default class Drawer extends React.Component<DrawerProps, object> {
     'resizable',
     'overlay',
     'body',
-    'popOverContainer'
+    'popOverContainer',
+    'showErrorMsg'
   ];
   static defaultProps: Partial<DrawerProps> = {
     title: '',
@@ -62,7 +143,8 @@ export default class Drawer extends React.Component<DrawerProps, object> {
     position: 'right',
     resizable: false,
     overlay: true,
-    closeOnEsc: false
+    closeOnEsc: false,
+    showErrorMsg: true
   };
 
   reaction: any;
@@ -112,25 +194,25 @@ export default class Drawer extends React.Component<DrawerProps, object> {
     this.reaction && this.reaction();
   }
 
-  buildActions(): Array<Action> {
+  buildActions(): Array<ActionSchema> {
     const {actions, confirm, translate: __} = this.props;
 
     if (typeof actions !== 'undefined') {
       return actions;
     }
 
-    let ret: Array<Action> = [];
+    let ret: Array<ActionSchema> = [];
     ret.push({
       type: 'button',
       actionType: 'close',
-      label: __('取消')
+      label: __('cancle')
     });
 
     if (confirm) {
       ret.push({
         type: 'button',
         actionType: 'confirm',
-        label: __('确认'),
+        label: __('confirm'),
         primary: true
       });
     }
@@ -276,7 +358,10 @@ export default class Drawer extends React.Component<DrawerProps, object> {
       disabled: store.loading,
       onAction: this.handleAction,
       onFinished: this.handleChildFinished,
-      popOverContainer: this.getPopOverContainer
+      popOverContainer: this.getPopOverContainer,
+      onChange: this.handleFormChange,
+      onInit: this.handleFormInit,
+      onSaved: this.handleFormSaved
     };
 
     if (schema.type === 'form') {
@@ -286,11 +371,6 @@ export default class Drawer extends React.Component<DrawerProps, object> {
         submitText: null,
         ...schema
       };
-
-      // 同步数据到 Dialog 层，方便 actions 根据表单数据联动。
-      subProps.onChange = this.handleFormChange;
-      subProps.onInit = this.handleFormInit;
-      subProps.onSaved = this.handleFormSaved;
     }
 
     return render(`body${key ? `/${key}` : ''}`, schema, subProps);
@@ -303,14 +383,14 @@ export default class Drawer extends React.Component<DrawerProps, object> {
       return null;
     }
 
-    const {store, render, classnames: cx} = this.props;
+    const {store, render, classnames: cx, showErrorMsg} = this.props;
 
     return (
       <div className={cx('Drawer-footer')}>
         {store.loading || store.error ? (
           <div className={cx('Drawer-info')}>
             <Spinner size="sm" key="info" show={store.loading} />
-            {store.error ? (
+            {showErrorMsg && store.error ? (
               <span className={cx('Drawer-error')}>{store.msg}</span>
             ) : null}
           </div>
@@ -538,7 +618,9 @@ export default class Drawer extends React.Component<DrawerProps, object> {
   storeType: ModalStore.name,
   storeExtendsData: false,
   name: 'drawer',
-  isolateScope: true
+  isolateScope: true,
+  shouldSyncSuperStore: (store: IServiceStore, props: any) =>
+    store.drawerOpen || props.show
 })
 export class DrawerRenderer extends Drawer {
   static contextType = ScopedContext;
@@ -576,6 +658,15 @@ export class DrawerRenderer extends Drawer {
     }
 
     if (!targets.length) {
+      const page = findLast(
+        components,
+        component => component.props.type === 'page'
+      );
+
+      if (page) {
+        components.push(...page.context.getComponents());
+      }
+
       const form = findLast(
         components,
         component => component.props.type === 'form'
@@ -614,7 +705,9 @@ export class DrawerRenderer extends Drawer {
           ) {
             onConfirm && onConfirm(values, rawAction || action, ctx, targets);
           } else if (action.close) {
-            this.handleSelfClose();
+            action.close === true
+              ? this.handleSelfClose()
+              : this.closeTarget(action.close);
           }
           store.markBusying(false);
         })
@@ -649,6 +742,7 @@ export class DrawerRenderer extends Drawer {
     if (action.actionType === 'close' || action.actionType === 'cancel') {
       store.setCurrentAction(action);
       onClose();
+      action.close && this.closeTarget(action.close);
     } else if (action.actionType === 'confirm') {
       store.setCurrentAction(action);
       this.tryChildrenToHandle(action, data) || onClose();
@@ -661,6 +755,10 @@ export class DrawerRenderer extends Drawer {
     } else if (action.actionType === 'reload') {
       store.setCurrentAction(action);
       action.target && scoped.reload(action.target, data);
+      if (action.close) {
+        this.handleSelfClose();
+        this.closeTarget(action.close);
+      }
     } else if (this.tryChildrenToHandle(action, data)) {
       // do nothing
     } else if (action.actionType === 'ajax') {
@@ -679,7 +777,10 @@ export class DrawerRenderer extends Drawer {
             action.redirect && filter(action.redirect, store.data);
           redirect && env.jumpTo(redirect, action);
           action.reload && this.reloadTarget(action.reload, store.data);
-          action.close && this.handleSelfClose();
+          if (action.close) {
+            this.handleSelfClose();
+            this.closeTarget(action.close);
+          }
         })
         .catch(() => {});
     } else if (onAction) {
@@ -761,5 +862,10 @@ export class DrawerRenderer extends Drawer {
   reloadTarget(target: string, data?: any) {
     const scoped = this.context as IScopedContext;
     scoped.reload(target, data);
+  }
+
+  closeTarget(target: string) {
+    const scoped = this.context as IScopedContext;
+    scoped.close(target);
   }
 }

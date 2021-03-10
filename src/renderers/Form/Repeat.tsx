@@ -7,7 +7,17 @@
 
 import React from 'react';
 import cx from 'classnames';
-import {FormItem, FormControlProps} from './Item';
+import {FormItem, FormControlProps, FormBaseControl} from './Item';
+
+/**
+ * Repeat
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/repeat
+ */
+export interface RepeatControlSchema extends FormBaseControl {
+  type: 'rating';
+
+  options?: string;
+}
 
 const LANG: {
   [propName: string]: string;
@@ -187,7 +197,7 @@ export default class RepeatControl extends React.Component<RepeatProps, any> {
       <div className="repeat-control hbox">
         {input ? (
           <div className="col v-middle" style={{width: 30}}>
-            <span>{__('每')}</span>
+            <span>{__('Repeat.pre')}</span>
           </div>
         ) : null}
 

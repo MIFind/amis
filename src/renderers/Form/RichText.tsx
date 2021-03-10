@@ -1,8 +1,23 @@
 import React from 'react';
-import {FormItem, FormControlProps} from './Item';
+import {FormItem, FormControlProps, FormBaseControl} from './Item';
 import cx from 'classnames';
 import LazyComponent from '../../components/LazyComponent';
 import {noop} from '../../utils/helper';
+
+/**
+ * RichText
+ * 文档：https://baidu.gitee.io/amis/docs/components/form/rich-text
+ */
+export interface RichTextControlSchema extends FormBaseControl {
+  type: 'rich-text';
+
+  vendor?: 'froala' | 'tinymce';
+
+  receiver?: string;
+  videoReceiver?: string;
+
+  options?: any;
+}
 
 export interface RichTextProps extends FormControlProps {
   options?: any;
@@ -11,17 +26,11 @@ export interface RichTextProps extends FormControlProps {
 
 function loadRichText(
   type: 'tinymce' | 'froala' = 'froala'
-): () => Promise<React.ReactType> {
+): () => Promise<any> {
   return () =>
-    new Promise(resolve =>
-      type === 'tinymce'
-        ? (require as any)(['../../components/Tinymce'], (component: any) =>
-            resolve(component.default)
-          )
-        : (require as any)(['../../components/RichText'], (component: any) =>
-            resolve(component.default)
-          )
-    );
+    type === 'tinymce'
+      ? import('../../components/Tinymce').then(item => item.default)
+      : import('../../components/RichText').then(item => item.default);
 }
 
 export default class RichTextControl extends React.Component<
@@ -30,9 +39,9 @@ export default class RichTextControl extends React.Component<
 > {
   static defaultProps: Partial<RichTextProps> = {
     imageEditable: true,
-    reciever: '/api/upload/image',
-    videoReciever: '/api/upload/video',
-    placeholder: '请输入',
+    receiver: '/api/upload/image',
+    videoReceiver: '/api/upload/video',
+    placeholder: 'placeholder.enter',
     options: {
       toolbarButtonsSM: [
         'paragraphFormat',
@@ -117,6 +126,7 @@ export default class RichTextControl extends React.Component<
       props.vendor || (props.env.richTextToken ? 'froala' : 'tinymce');
     this.handleFocus = this.handleFocus.bind(this);
     this.handleBlur = this.handleBlur.bind(this);
+    this.handleChange = this.handleChange.bind(this);
 
     if (finnalVendor === 'froala') {
       this.config = {
@@ -142,12 +152,12 @@ export default class RichTextControl extends React.Component<
         key: props.env.richTextToken,
         ...props.options,
         editorClass: props.editorClass,
-        placeholderText: props.placeholder,
-        imageUploadURL: props.reciever,
+        placeholderText: props.translate(props.placeholder),
+        imageUploadURL: props.receiver,
         imageUploadParams: {
           from: 'rich-text'
         },
-        videoUploadURL: props.videoReciever,
+        videoUploadURL: props.videoReceiver,
         videoUploadParams: {
           from: 'rich-text'
         },
@@ -157,7 +167,7 @@ export default class RichTextControl extends React.Component<
           'froalaEditor.blur': this.handleBlur
         },
         language:
-          !this.props.locale || this.props.locale === 'zh-cn' ? 'zh_cn' : ''
+          !this.props.locale || this.props.locale === 'zh-CN' ? 'zh_cn' : ''
       };
 
       if (props.buttons) {
@@ -169,7 +179,8 @@ export default class RichTextControl extends React.Component<
     } else {
       const fetcher = props.env.fetcher;
       this.config = {
-        images_upload_url: props.reciever,
+        ...props.options,
+        images_upload_url: props.receiver,
         images_upload_handler: async (
           blobInfo: any,
           ok: (locaiton: string) => void,
@@ -178,7 +189,7 @@ export default class RichTextControl extends React.Component<
           const formData = new FormData();
           formData.append('file', blobInfo.blob(), blobInfo.filename());
           try {
-            const response = await fetcher(props.reciever, formData, {
+            const response = await fetcher(props.receiver, formData, {
               method: 'post'
             });
             if (response.ok) {
@@ -209,6 +220,20 @@ export default class RichTextControl extends React.Component<
     });
   }
 
+  handleChange(
+    value: any,
+    submitOnChange?: boolean,
+    changeImmediately?: boolean
+  ) {
+    const {onChange, disabled} = this.props;
+
+    if (disabled) {
+      return;
+    }
+
+    onChange?.(value, submitOnChange, changeImmediately);
+  }
+
   render() {
     const {
       className,
@@ -235,7 +260,7 @@ export default class RichTextControl extends React.Component<
         <LazyComponent
           getComponent={loadRichText(finnalVendor)}
           model={value}
-          onModelChange={disabled ? noop : onChange}
+          onModelChange={this.handleChange}
           onFocus={this.handleFocus}
           onBlur={this.handleBlur}
           config={this.config}

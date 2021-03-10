@@ -2,38 +2,130 @@ import React from 'react';
 import {Renderer, RendererProps} from '../factory';
 import {Action, Schema, SchemaNode} from '../types';
 import find from 'lodash/find';
-import {isVisible, autobind, isDisabled} from '../utils/helper';
+import {
+  isVisible,
+  autobind,
+  isDisabled,
+  isObject,
+  createObject
+} from '../utils/helper';
 import findIndex from 'lodash/findIndex';
 import {Tabs as CTabs, Tab} from '../components/Tabs';
 import {ClassNamesFn} from '../theme';
+import {
+  BaseSchema,
+  SchemaClassName,
+  SchemaCollection,
+  SchemaIcon
+} from '../Schema';
+import {ActionSchema} from './Action';
+import {filter} from '../utils/tpl';
+import {resolveVariable} from '../utils/tpl-builtin';
 
-export interface TabProps extends Schema {
-  title?: string; // 标题
-  icon?: string;
-  hash?: string; // 通过 hash 来控制当前选择
-  tab?: Schema;
-  className?: string;
-  classnames: ClassNamesFn;
-  eventKey?: string | number;
-  activeKey?: string | number;
+export interface TabSchema extends Omit<BaseSchema, 'type'> {
+  /**
+   * Tab 标题
+   */
+  title?: string;
+
+  /**
+   * 内容
+   * @deprecated 用 body 属性
+   */
+  tab?: SchemaCollection;
+
+  /**
+   * 内容
+   */
+  body?: SchemaCollection;
+
+  /**
+   * 徽标
+   */
+  badge?: number;
+
+  /**
+   * 设置以后将跟url的hash对应
+   */
+  hash?: string;
+
+  /**
+   * 按钮图标
+   */
+  icon?: SchemaIcon;
+
+  iconPosition?: 'left' | 'right';
+
+  /**
+   * 设置以后内容每次都会重新渲染
+   */
   reload?: boolean;
+
+  /**
+   * 点开时才加载卡片内容
+   */
   mountOnEnter?: boolean;
+
+  /**
+   * 卡片隐藏就销毁卡片节点。
+   */
   unmountOnExit?: boolean;
-  disabled?: string;
-  disabledOn?: string;
 }
 
-export interface TabsProps extends RendererProps {
-  mode?: '' | 'line' | 'card' | 'radio' | 'vertical';
-  tabsMode?: '' | 'line' | 'card' | 'radio' | 'vertical';
-  activeKey?: string | number;
-  contentClassName?: string;
-  location?: any;
+/**
+ * 选项卡控件。
+ * 文档：https://baidu.gitee.io/amis/docs/components/tabs
+ */
+export interface TabsSchema extends BaseSchema {
+  type: 'tabs';
+
+  /**
+   * 选项卡成员。当配置了 source 时，选项卡成员，将会根据目标数据进行重复。
+   */
+  tabs: Array<TabSchema>;
+
+  /**
+   * 关联已有数据，选项卡直接根据目标数据重复。
+   */
+  source?: string;
+
+  /**
+   * 类名
+   */
+  tabsClassName?: SchemaClassName;
+
+  /**
+   * 展示形式
+   */
+  tabsMode?: '' | 'line' | 'card' | 'radio' | 'vertical' | 'tiled';
+
+  /**
+   * 内容类名
+   */
+  contentClassName?: SchemaClassName;
+
+  /**
+   * 卡片是否只有在点开的时候加载？
+   */
   mountOnEnter?: boolean;
+
+  /**
+   * 卡片隐藏的时候是否销毁卡片内容
+   */
   unmountOnExit?: boolean;
-  tabs?: Array<TabProps>;
-  tabRender?: (tab: TabProps, props: TabsProps, index: number) => JSX.Element;
-  toolbar?: SchemaNode;
+
+  /**
+   * 可以在右侧配置点其他功能按钮。
+   */
+  toolbar?: ActionSchema;
+}
+
+export interface TabsProps
+  extends RendererProps,
+    Omit<TabsSchema, 'className' | 'contentClassName'> {
+  activeKey?: string | number;
+  location?: any;
+  tabRender?: (tab: TabSchema, props: TabsProps, index: number) => JSX.Element;
 }
 
 export interface TabsState {
@@ -49,7 +141,7 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
     unmountOnExit: false
   };
 
-  renderTab?: (tab: TabProps, props: TabsProps, index: number) => JSX.Element;
+  renderTab?: (tab: TabSchema, props: TabsProps, index: number) => JSX.Element;
 
   constructor(props: TabsProps) {
     super(props);
@@ -62,7 +154,7 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
       activeKey = props.activeKey;
     } else if (location && Array.isArray(tabs)) {
       const hash = location.hash.substring(1);
-      const tab: TabProps = find(tabs, tab => tab.hash === hash) as TabProps;
+      const tab: TabSchema = find(tabs, tab => tab.hash === hash) as TabSchema;
       activeKey = tab && tab.hash ? tab.hash : (tabs[0] && tabs[0].hash) || 0;
     }
 
@@ -85,10 +177,10 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
         return;
       }
 
-      const tab: TabProps = find(
+      const tab: TabSchema = find(
         nextProps.tabs,
         tab => tab.hash === hash
-      ) as TabProps;
+      ) as TabSchema;
       if (tab && tab.hash && tab.hash !== this.state.activeKey) {
         this.setState({
           activeKey: tab.hash,
@@ -98,11 +190,11 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
     } else if (props.tabs !== nextProps.tabs) {
       let activeKey: any = this.state.activeKey;
       const location = nextProps.location;
-      let tab: TabProps | null = null;
+      let tab: TabSchema | null = null;
 
       if (location && Array.isArray(nextProps.tabs)) {
         const hash = location.hash.substring(1);
-        tab = find(nextProps.tabs, tab => tab.hash === hash) as TabProps;
+        tab = find(nextProps.tabs, tab => tab.hash === hash) as TabSchema;
       }
 
       if (tab) {
@@ -137,7 +229,7 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
     }
 
     // 当前 tab 可能不可见，所以需要自动切到一个可见的 tab, 向前找，找一圈
-    const tabIndex = findIndex(tabs, (tab: TabProps, index) =>
+    const tabIndex = findIndex(tabs, (tab: TabSchema, index) =>
       tab.hash
         ? tab.hash === this.state.activeKey
         : index === this.state.activeKey
@@ -194,7 +286,7 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
     const {tabs} = this.props;
 
     return Array.isArray(tabs)
-      ? findIndex(tabs, (tab: TabProps, index) =>
+      ? findIndex(tabs, (tab: TabSchema, index) =>
           tab.hash
             ? tab.hash === this.state.activeKey
             : index === this.state.activeKey
@@ -203,12 +295,7 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
   }
 
   renderToolbar() {
-    const {
-      toolbar,
-      render,
-      classnames: cx,
-      toolbarClassName
-    } = this.props;
+    const {toolbar, render, classnames: cx, toolbarClassName} = this.props;
 
     return toolbar ? (
       <div className={cx(`Tabs-toolbar`, toolbarClassName)}>
@@ -222,7 +309,6 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
       classnames: cx,
       classPrefix: ns,
       contentClassName,
-      tabs,
       tabRender,
       className,
       render,
@@ -230,14 +316,96 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
       mode: dMode,
       tabsMode,
       mountOnEnter,
-      unmountOnExit
+      unmountOnExit,
+      source,
+      value
     } = this.props;
 
-    if (!Array.isArray(tabs)) {
+    const mode = tabsMode || dMode;
+    const arr =
+      typeof value !== 'undefined'
+        ? isObject(value)
+          ? Object.keys(value).map(key => ({
+              key: key,
+              value: value[key]
+            }))
+          : Array.isArray(value)
+          ? value
+          : []
+        : resolveVariable(source, data);
+
+    let tabs = this.props.tabs;
+    if (!tabs) {
       return null;
     }
 
-    const mode = tabsMode || dMode;
+    tabs = Array.isArray(tabs) ? tabs : [tabs];
+    let children: Array<JSX.Element | null> = [];
+
+    if (Array.isArray(arr)) {
+      arr.forEach((value, index) => {
+        const ctx = createObject(
+          data,
+          isObject(value) ? {index, ...value} : {item: value, index}
+        );
+
+        children.push(
+          ...tabs.map((tab, tabIndex) =>
+            isVisible(tab, ctx) ? (
+              <Tab
+                {...(tab as any)}
+                title={filter(tab.title, ctx)}
+                disabled={isDisabled(tab, ctx)}
+                key={`${index * 1000 + tabIndex}`}
+                eventKey={index * 1000 + tabIndex}
+                mountOnEnter={mountOnEnter}
+                unmountOnExit={
+                  typeof tab.reload === 'boolean'
+                    ? tab.reload
+                    : typeof tab.unmountOnExit === 'boolean'
+                    ? tab.unmountOnExit
+                    : unmountOnExit
+                }
+              >
+                {render(
+                  `item/${index}/${tabIndex}`,
+                  tab.tab || tab.body || '',
+                  {
+                    data: ctx
+                  }
+                )}
+              </Tab>
+            ) : null
+          )
+        );
+      });
+    } else {
+      children = tabs.map((tab, index) =>
+        isVisible(tab, data) ? (
+          <Tab
+            {...(tab as any)}
+            title={filter(tab.title, data)}
+            disabled={isDisabled(tab, data)}
+            key={index}
+            eventKey={tab.hash || index}
+            mountOnEnter={mountOnEnter}
+            unmountOnExit={
+              typeof tab.reload === 'boolean'
+                ? tab.reload
+                : typeof tab.unmountOnExit === 'boolean'
+                ? tab.unmountOnExit
+                : unmountOnExit
+            }
+          >
+            {this.renderTab
+              ? this.renderTab(tab, this.props, index)
+              : tabRender
+              ? tabRender(tab, this.props, index)
+              : render(`tab/${index}`, tab.tab || tab.body || '')}
+          </Tab>
+        ) : null
+      );
+    }
 
     return (
       <CTabs
@@ -250,30 +418,7 @@ export default class Tabs extends React.Component<TabsProps, TabsState> {
         activeKey={this.state.activeKey}
         toolbar={this.renderToolbar()}
       >
-        {tabs.map((tab, index) =>
-          isVisible(tab, data) ? (
-            <Tab
-              {...tab}
-              disabled={isDisabled(tab, data)}
-              key={index}
-              eventKey={tab.hash || index}
-              mountOnEnter={mountOnEnter}
-              unmountOnExit={
-                typeof tab.reload === 'boolean'
-                  ? tab.reload
-                  : typeof tab.unmountOnExit === 'boolean'
-                  ? tab.unmountOnExit
-                  : unmountOnExit
-              }
-            >
-              {this.renderTab
-                ? this.renderTab(tab, this.props, index)
-                : tabRender
-                ? tabRender(tab, this.props, index)
-                : render(`tab/${index}`, tab.tab || tab.body || '')}
-            </Tab>
-          ) : null
-        )}
+        {children}
       </CTabs>
     );
   }

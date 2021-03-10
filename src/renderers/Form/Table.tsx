@@ -1,5 +1,5 @@
 import React from 'react';
-import {FormItem, FormControlProps} from './Item';
+import {FormItem, FormControlProps, FormBaseControl} from './Item';
 import cx from 'classnames';
 import Button from '../../components/Button';
 import {createObject, isObjectShallowModified} from '../../utils/helper';
@@ -12,35 +12,139 @@ import findIndex from 'lodash/findIndex';
 import memoize from 'lodash/memoize';
 import {SimpleMap} from '../../utils/SimpleMap';
 import {Icon} from '../../components/icons';
+import {TableSchema} from '../Table';
+import {SchemaApi} from '../../Schema';
 
-export interface TableProps extends FormControlProps {
-  placeholder?: string;
-  columns?: Array<any>;
+export interface TableControlSchema extends FormBaseControl, TableSchema {
+  type: 'table';
+
+  /**
+   * 可新增
+   */
   addable?: boolean;
-  addApi?: Api;
+
+  /**
+   * 是否可以拖拽排序
+   */
+  draggable?: boolean;
+
+  /**
+   * 新增 API
+   */
+  addApi?: SchemaApi;
+
+  /**
+   * 新增按钮
+   */
   addBtnLabel?: string;
+
+  /**
+   * 新增图标
+   */
   addBtnIcon?: string;
+
+  /**
+   * 显示新增按钮
+   */
   showAddBtn?: boolean;
+
+  /**
+   * 可否删除
+   */
   removable?: boolean;
-  deleteApi?: Api;
+
+  /**
+   * 删除的 API
+   */
+  deleteApi?: SchemaApi;
+
+  /**
+   * 可否编辑
+   */
   editable?: boolean;
+
+  /**
+   * 更新按钮名称
+   */
   updateBtnLabel?: string;
+
+  /**
+   * 更新按钮图标
+   */
   updateBtnIcon?: string;
+
+  /**
+   * 确认按钮文字
+   */
   confirmBtnLabel?: string;
+
+  /**
+   * 确认按钮图标
+   */
   confirmBtnIcon?: string;
+
+  /**
+   * 取消按钮文字
+   */
   cancelBtnLabel?: string;
+
+  /**
+   * 取消按钮图标
+   */
   cancelBtnIcon?: string;
+
+  /**
+   * 删除按钮文字
+   */
   deleteBtnLabel?: string;
+
+  /**
+   * 删除按钮图标
+   */
   deleteBtnIcon?: string;
-  updateApi?: Api;
+
+  /**
+   * 更新 API
+   */
+  updateApi?: SchemaApi;
+
+  /**
+   * 初始值，新增的时候
+   */
   scaffold?: any;
+
+  /**
+   * 删除确认文字
+   */
   deleteConfirmText?: string;
+
+  /**
+   * 值字段
+   */
   valueField?: string;
+
+  /**
+   * 是否为确认的编辑模式。
+   */
+  needConfirm?: boolean;
+
+  /**
+   * 是否可以访问父级数据，正常 combo 已经关联到数组成员，是不能访问父级数据的。
+   */
+  canAccessSuperData?: boolean;
 }
+
+export interface TableProps
+  extends FormControlProps,
+    Omit<
+      TableControlSchema,
+      'type' | 'className' | 'descriptionClassName' | 'inputClassName'
+    > {}
 
 export interface TableState {
   columns: Array<any>;
   editIndex: number;
+  buildItemProps: (props: any) => any;
   editting?: any;
   isCreateMode?: boolean;
 }
@@ -69,7 +173,9 @@ export default class FormTable extends React.Component<TableProps, TableState> {
     'editable',
     'addApi',
     'updateApi',
-    'deleteApi'
+    'deleteApi',
+    'needConfirm',
+    'canAccessSuperData'
   ];
 
   entries: SimpleMap<any, number>;
@@ -81,7 +187,8 @@ export default class FormTable extends React.Component<TableProps, TableState> {
 
     this.state = {
       columns: this.buildColumns(props),
-      editIndex: -1
+      editIndex: -1,
+      buildItemProps: this.buildItemProps.bind(this)
     };
 
     this.entries = new SimpleMap();
@@ -92,6 +199,16 @@ export default class FormTable extends React.Component<TableProps, TableState> {
     this.handleTableSave = this.handleTableSave.bind(this);
     this.getEntryId = this.getEntryId.bind(this);
     this.subFormRef = this.subFormRef.bind(this);
+  }
+
+  componentDidUpdate(nextProps: TableProps) {
+    const props = this.props;
+
+    if (props.columns !== nextProps.columns) {
+      this.setState({
+        columns: this.buildColumns(props)
+      });
+    }
   }
 
   componentWillUnmount() {
@@ -106,16 +223,15 @@ export default class FormTable extends React.Component<TableProps, TableState> {
   validate(): any {
     const {value, minLength, maxLength, translate: __} = this.props;
 
+    // todo: 如果当前正在编辑中，表单提交了，应该先让正在编辑的东西提交然后再做验证。
+    if (~this.state.editIndex) {
+      return __('Table.editing');
+    }
+
     if (minLength && (!Array.isArray(value) || value.length < minLength)) {
-      return __(
-        '组合表单成员数量不够，低于设定的最小{{minLength}}个，请添加更多的成员。',
-        {minLength}
-      );
+      return __('Combo.minLength', {minLength});
     } else if (maxLength && Array.isArray(value) && value.length > maxLength) {
-      return __(
-        '组合表单成员数量超出，超出设定的最大{{maxLength}}个，请删除多余的成员。',
-        {maxLength}
-      );
+      return __('Combo.maxLength', {maxLength});
     } else {
       const subForms: Array<any> = [];
       Object.keys(this.subForms).forEach(
@@ -125,7 +241,7 @@ export default class FormTable extends React.Component<TableProps, TableState> {
         return Promise.all(subForms.map(item => item.validate())).then(
           values => {
             if (~values.indexOf(false)) {
-              return __('内部表单验证失败');
+              return __('Form.validateFailed');
             }
 
             return;
@@ -135,7 +251,7 @@ export default class FormTable extends React.Component<TableProps, TableState> {
     }
   }
 
-  doAction(action: Action, ctx: RendererData, ...rest: Array<any>) {
+  async doAction(action: Action, ctx: RendererData, ...rest: Array<any>) {
     const {
       onAction,
       value,
@@ -143,14 +259,27 @@ export default class FormTable extends React.Component<TableProps, TableState> {
       env,
       onChange,
       editable,
+      addApi,
       translate: __
     } = this.props;
 
     if (action.actionType === 'add') {
       const rows = Array.isArray(value) ? value.concat() : [];
 
-      if (action.payload) {
-        let toAdd = dataMapping(action.payload, ctx);
+      if (addApi || action.payload) {
+        let toAdd = null;
+
+        if (isEffectiveApi(addApi, ctx)) {
+          const payload = await env.fetcher(addApi, ctx);
+          if (payload && !payload.ok) {
+            env.notify('error', payload.msg || __('fetchFailed'));
+            return;
+          } else if (payload && payload.ok) {
+            toAdd = payload.data;
+          }
+        } else {
+          toAdd = dataMapping(action.payload, ctx);
+        }
 
         toAdd = Array.isArray(toAdd) ? toAdd : [toAdd];
 
@@ -159,7 +288,8 @@ export default class FormTable extends React.Component<TableProps, TableState> {
             rows,
             item => item[valueField as string] == toAdd[valueField as string]
           );
-          if (~idx) {
+          // 应该只有配置了 valueField 的时候，才去删重复项
+          if (~idx && valueField) {
             rows.splice(idx, 1);
           }
           rows.push(toAdd);
@@ -171,7 +301,6 @@ export default class FormTable extends React.Component<TableProps, TableState> {
           this.startEdit(rows.length - 1, rows[rows.length - 1], true);
         }
 
-        // todo 如果配置新增 Api 怎么办？
         return;
       } else {
         return this.addItem(rows.length - 1);
@@ -181,9 +310,9 @@ export default class FormTable extends React.Component<TableProps, TableState> {
       action.actionType === 'delete'
     ) {
       if (!valueField) {
-        return env.alert(__('请配置 valueField'));
+        return env.alert(__('Table.valueField'));
       } else if (!action.payload) {
-        return env.alert(__('action 上请配置 payload, 否则不清楚要删除哪个'));
+        return env.alert(__('Table.playload'));
       }
 
       const rows = Array.isArray(value) ? value.concat() : [];
@@ -209,14 +338,19 @@ export default class FormTable extends React.Component<TableProps, TableState> {
   }
 
   addItem(index: number, payload: any = this.props.scaffold) {
-    const {value, onChange} = this.props;
+    const {value, onChange, needConfirm} = this.props;
     let newValue = Array.isArray(value) ? value.concat() : [];
     newValue.splice(index + 1, 0, {
       ...payload
     });
     onChange(newValue);
     index = Math.min(index + 1, newValue.length - 1);
-    this.startEdit(index, newValue[index], true);
+
+    if (needConfirm === false) {
+      onChange(newValue);
+    } else {
+      this.startEdit(index, newValue[index], true);
+    }
   }
 
   startEdit(index: number, editting?: any, isCreate: boolean = false) {
@@ -224,11 +358,13 @@ export default class FormTable extends React.Component<TableProps, TableState> {
     const scaffold = this.props.scaffold;
     this.setState({
       editIndex: index,
-      editting: editting || (value && value[index]) || scaffold || {},
+      buildItemProps: this.buildItemProps.bind(this),
+      editting: (this.editting =
+        editting || (value && value[index]) || scaffold || {}),
       isCreateMode: isCreate,
       columns:
         this.state.isCreateMode === isCreate
-          ? this.state.columns
+          ? this.state.columns.concat()
           : this.buildColumns(this.props, isCreate)
     });
   }
@@ -268,7 +404,7 @@ export default class FormTable extends React.Component<TableProps, TableState> {
     }
 
     if (remote && !remote.ok) {
-      env.notify('error', remote.msg || __('保存失败'));
+      env.notify('error', remote.msg || __('saveFailed'));
       return;
     } else if (remote && remote.ok) {
       item = {
@@ -283,6 +419,8 @@ export default class FormTable extends React.Component<TableProps, TableState> {
 
     this.setState({
       editIndex: -1,
+      columns: this.state.columns.concat(),
+      buildItemProps: this.buildItemProps.bind(this),
       editting: null
     });
     onChange(newValue);
@@ -298,7 +436,9 @@ export default class FormTable extends React.Component<TableProps, TableState> {
     }
 
     this.setState({
-      editIndex: -1
+      editIndex: -1,
+      columns: this.state.columns.concat(),
+      buildItemProps: this.buildItemProps.bind(this)
     });
   }
 
@@ -322,7 +462,7 @@ export default class FormTable extends React.Component<TableProps, TableState> {
     const ctx = createObject(data, item);
     if (isEffectiveApi(deleteApi, ctx)) {
       const confirmed = await env.confirm(
-        deleteConfirmText ? filter(deleteConfirmText, ctx) : __('确认要删除？')
+        deleteConfirmText ? filter(deleteConfirmText, ctx) : __('deleteConfirm')
       );
       if (!confirmed) {
         // 如果不确认，则跳过！
@@ -332,7 +472,7 @@ export default class FormTable extends React.Component<TableProps, TableState> {
       const result = await env.fetcher(deleteApi, ctx);
 
       if (!result.ok) {
-        env.notify('error', __('删除失败'));
+        env.notify('error', __('deleteFailed'));
         return;
       }
     }
@@ -359,18 +499,19 @@ export default class FormTable extends React.Component<TableProps, TableState> {
       : [];
     const ns = this.props.classPrefix;
     const __ = this.props.translate;
+    const needConfirm = this.props.needConfirm;
 
     let btns = [];
     if (props.addable && props.showAddBtn !== false) {
       btns.push({
         children: ({key, rowIndex}: {key: any; rowIndex: number}) =>
-          ~this.state.editIndex ? null : (
+          ~this.state.editIndex && needConfirm !== false ? null : (
             <Button
               classPrefix={ns}
               size="sm"
               key={key}
               level="link"
-              tooltip={__('新增一行')}
+              tooltip={__('Table.addRow')}
               tooltipContainer={
                 env && env.getModalContainer ? env.getModalContainer : undefined
               }
@@ -385,7 +526,23 @@ export default class FormTable extends React.Component<TableProps, TableState> {
       });
     }
 
-    if (props.editable) {
+    if (props.needConfirm === false) {
+      columns = columns.map(column => {
+        const quickEdit = column.quickEdit;
+
+        return quickEdit === false
+          ? omit(column, ['quickEdit'])
+          : {
+              ...column,
+              quickEdit: {
+                type: 'text',
+                ...quickEdit,
+                saveImmediately: true,
+                mode: 'inline'
+              }
+            };
+      });
+    } else if (props.editable) {
       columns = columns.map(column => {
         const quickEdit =
           !isCreateMode && column.hasOwnProperty('quickEditOnUpdate')
@@ -421,7 +578,7 @@ export default class FormTable extends React.Component<TableProps, TableState> {
               size="sm"
               key={key}
               level="link"
-              tooltip={__('编辑当前行')}
+              tooltip={__('Table.editRow')}
               tooltipContainer={
                 env && env.getModalContainer ? env.getModalContainer : undefined
               }
@@ -445,7 +602,7 @@ export default class FormTable extends React.Component<TableProps, TableState> {
               size="sm"
               key={key}
               level="link"
-              tooltip={__('保存')}
+              tooltip={__('save')}
               tooltipContainer={
                 env && env.getModalContainer ? env.getModalContainer : undefined
               }
@@ -469,7 +626,7 @@ export default class FormTable extends React.Component<TableProps, TableState> {
               size="sm"
               key={key}
               level="link"
-              tooltip={__('取消')}
+              tooltip={__('cancle')}
               tooltipContainer={
                 env && env.getModalContainer ? env.getModalContainer : undefined
               }
@@ -497,13 +654,14 @@ export default class FormTable extends React.Component<TableProps, TableState> {
           rowIndex: number;
           data: any;
         }) =>
-          ~this.state.editIndex || (data && data.__isPlaceholder) ? null : (
+          (~this.state.editIndex || (data && data.__isPlaceholder)) &&
+          needConfirm !== false ? null : (
             <Button
               classPrefix={ns}
               size="sm"
               key={key}
               level="link"
-              tooltip={__('删除当前行')}
+              tooltip={__('Table.deleteRow')}
               tooltipContainer={
                 env && env.getModalContainer ? env.getModalContainer : undefined
               }
@@ -524,8 +682,11 @@ export default class FormTable extends React.Component<TableProps, TableState> {
       columns.push({
         type: 'operation',
         buttons: btns,
-        width: 150,
-        label: __('操作')
+        label: __('Table.operation'),
+        className: 'v-middle nowrap',
+        fixed: 'right',
+        width: '1%',
+        innerClassName: 'm-n'
       });
     }
 
@@ -537,15 +698,15 @@ export default class FormTable extends React.Component<TableProps, TableState> {
     diff: Array<object> | object,
     rowIndexes: Array<number> | number
   ) {
-    const {onChange, value} = this.props;
+    const {onChange, value, needConfirm} = this.props;
 
     const newValue = Array.isArray(value) ? value.concat() : [];
 
     if (~this.state.editIndex) {
       this.setState({
-        editting: this.editting = {
+        editting: (this.editting = {
           ...rows
-        }
+        })
       });
       return;
     } else if (Array.isArray(rows)) {
@@ -616,7 +777,10 @@ export default class FormTable extends React.Component<TableProps, TableState> {
       addable,
       columnsTogglable,
       combineNum,
-      translate: __
+      translate: __,
+      canAccessSuperData,
+      affixRow,
+      prefixRow
     } = this.props;
 
     return (
@@ -627,7 +791,9 @@ export default class FormTable extends React.Component<TableProps, TableState> {
             type: 'table',
             placeholder: __(placeholder),
             columns: this.state.columns,
-            affixHeader: false
+            affixHeader: false,
+            prefixRow,
+            affixRow
           },
           {
             value: undefined,
@@ -645,10 +811,11 @@ export default class FormTable extends React.Component<TableProps, TableState> {
             getEntryId: this.getEntryId,
             onSave: this.handleTableSave,
             onSaveOrder: this.handleSaveTableOrder,
-            buildItemProps: this.buildItemProps,
+            buildItemProps: this.state.buildItemProps,
             quickEditFormRef: this.subFormRef,
             columnsTogglable: columnsTogglable,
-            combineNum: combineNum
+            combineNum: combineNum,
+            canAccessSuperData
           }
         )}
       </div>
