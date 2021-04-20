@@ -6,6 +6,15 @@ export const components = [
     label: '布局',
     children: [
       {
+        label: '组件介绍',
+        path: '/zh-CN/components/index',
+        getComponent: () =>
+          // @ts-ignore
+          import('../../docs/zh-CN/components/index.md').then(
+            makeMarkdownRenderer
+          )
+      },
+      {
         label: 'Page 页面',
         path: '/zh-CN/components/page',
         getComponent: () =>
@@ -967,11 +976,38 @@ export const components = [
           )
       },
       {
+        label: 'Markdown 渲染',
+        path: '/zh-CN/components/markdown',
+        getComponent: () =>
+          // @ts-ignore
+          import('../../docs/zh-CN/components/markdown.md').then(
+            makeMarkdownRenderer
+          )
+      },
+      {
         label: 'Progress 进度条',
         path: '/zh-CN/components/progress',
         getComponent: () =>
           // @ts-ignore
           import('../../docs/zh-CN/components/progress.md').then(
+            makeMarkdownRenderer
+          )
+      },
+      {
+        label: 'Steps 步骤条',
+        path: '/zh-CN/components/steps',
+        getComponent: () =>
+          // @ts-ignore
+          import('../../docs/zh-CN/components/steps.md').then(
+            makeMarkdownRenderer
+          )
+      },
+      {
+        label: 'Property 属性表',
+        path: '/zh-CN/components/property',
+        getComponent: () =>
+          // @ts-ignore
+          import('../../docs/zh-CN/components/property.md').then(
             makeMarkdownRenderer
           )
       },
@@ -1063,7 +1099,6 @@ export const components = [
             makeMarkdownRenderer
           )
       },
-
       {
         label: 'Drawer 抽屉',
         path: '/zh-CN/components/drawer',
@@ -1089,6 +1124,16 @@ export const components = [
     label: '其他',
     children: [
       {
+        label: 'Avatar 头像',
+        path: '/zh-CN/components/avatar',
+        getComponent: () =>
+          // @ts-ignore
+          import('../../docs/zh-CN/components/avatar.md').then(
+            makeMarkdownRenderer
+          )
+      },
+
+      {
         label: 'Audio 音频',
         path: '/zh-CN/components/audio',
         getComponent: () =>
@@ -1107,7 +1152,15 @@ export const components = [
             makeMarkdownRenderer
           )
       },
-
+      {
+        label: 'Badge 角标',
+        path: '/zh-CN/components/badge',
+        getComponent: () =>
+          // @ts-ignore
+          import('../../docs/zh-CN/components/badge.md').then(
+            makeMarkdownRenderer
+          )
+      },
       {
         label: 'Wizard 向导',
         path: '/zh-CN/components/wizard',

@@ -13,6 +13,7 @@ import {
 import {Enginer} from './tpl';
 import uniqBy from 'lodash/uniqBy';
 import uniq from 'lodash/uniq';
+import transform from 'lodash/transform';
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
 
@@ -294,6 +295,21 @@ export const filters: {
     order?: 'asc' | 'desc'
   ) =>
     Array.isArray(input) ? input.sort(makeSorter(key, method, order)) : input,
+  objectToArray: (
+    input: any,
+    label: string = 'label',
+    value: string = 'value'
+  ) =>
+    transform(
+      input,
+      (result: any, v, k) => {
+        (result || (result = [])).push({
+          [label]: v,
+          [value]: k
+        });
+      },
+      []
+    ),
   unique: (input: any, key?: string) =>
     Array.isArray(input) ? (key ? uniqBy(input, key) : uniq(input)) : input,
   topAndOther: (
@@ -601,19 +617,7 @@ export function pickValues(names: string, data: object) {
   return ret;
 }
 
-export const resolveVariable = (path?: string, data: any = {}): any => {
-  if (!path || !data) {
-    return undefined;
-  }
-
-  if (path === '$$') {
-    return data;
-  } else if (path[0] === '$') {
-    path = path.substring(1);
-  } else if (path === '&') {
-    return data;
-  }
-
+function objectGet(data: any, path: string) {
   if (typeof data[path] !== 'undefined') {
     return data[path];
   }
@@ -626,13 +630,65 @@ export const resolveVariable = (path?: string, data: any = {}): any => {
 
     return undefined;
   }, data);
+}
+
+function parseJson(str: string, defaultValue?: any) {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    return defaultValue;
+  }
+}
+
+export const resolveVariable = (path?: string, data: any = {}): any => {
+  if (!path || !data || typeof path !== 'string') {
+    return undefined;
+  }
+
+  let [ns, varname] = path.split(':');
+
+  if (!varname && ns) {
+    varname = ns;
+    ns = '';
+  }
+
+  if (ns === 'window') {
+    data = window;
+  } else if (ns === 'ls' || ns === 'ss') {
+    let parts = keyToPath(varname.replace(/^{|}$/g, ''));
+    const key = parts.shift()!;
+    const raw =
+      ns === 'ss' ? sessionStorage.getItem(key) : localStorage.getItem(key);
+
+    if (typeof raw === 'string') {
+      const data = parseJson(raw, raw);
+
+      if (isObject(data) && parts.length) {
+        return objectGet(data, parts.join('.'));
+      }
+
+      return data;
+    }
+
+    return undefined;
+  }
+
+  if (varname === '$$') {
+    return data;
+  } else if (varname[0] === '$') {
+    varname = path.substring(1);
+  } else if (varname === '&') {
+    return data;
+  }
+
+  return objectGet(data, varname);
 };
 
-export const isPureVariable = (path?: any) =>
-  typeof path === 'string'
-    ? /^\$(?:([a-z0-9_.]+)|{[^}{]+})$/.test(path)
+export function isPureVariable(path?: any): path is string {
+  return typeof path === 'string'
+    ? /^\$(?:((?:\w+\:)?[a-z0-9_.][a-z0-9_.\[\]]*)|{[^}{]+})$/i.test(path)
     : false;
-
+}
 export const resolveVariableAndFilter = (
   path?: string,
   data: object = {},
@@ -643,7 +699,9 @@ export const resolveVariableAndFilter = (
     return undefined;
   }
 
-  const m = /^(\\)?\$(?:([a-z0-9_.]+)|{([\s\S]+)})$/i.exec(path);
+  const m = /^(\\)?\$(?:((?:\w+\:)?[a-z0-9_.][a-z0-9_.\[\]]*)|{([\s\S]+)})$/i.exec(
+    path
+  );
 
   if (!m) {
     return undefined;
@@ -660,7 +718,7 @@ export const resolveVariableAndFilter = (
 
   // 先只支持一层吧
   finalKey = finalKey.replace(
-    /(\\|\\\$)?\$(?:([a-zA-Z0-9_.]+)|{([^}{]+)})/g,
+    /(\\|\\\$)?\$(?:([a-zA-Z0-9_.][a-zA-Z0-9_.\[\]]*)|{([^}{]+)})/g,
     (_, escape) => {
       return escape
         ? _.substring(1)
@@ -736,7 +794,7 @@ export const tokenize = (
   }
 
   return str.replace(
-    /(\\)?\$(?:([a-z0-9_\.]+|&|\$)|{([^}{]+?)})/gi,
+    /(\\)?\$(?:((?:\w+\:)?[a-z0-9_\.][a-z0-9_\.\[\]]*|&|\$)|{([^}{]+?)})/gi,
     (_, escape, key1, key2, index, source) => {
       if (!escape && key1 === '$') {
         const prefix = source[index - 1];

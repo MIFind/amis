@@ -954,7 +954,50 @@ crud 组件支持通过配置`headerToolbar`和`footerToolbar`属性，实现在
 
 > 如果你不希望在顶部或者底部渲染默认组件，你可以设置`headerToolbar`和`footerToolbar`为空数组`[]`
 
-除了可以配置[SchemaNode 类型](../../docs/types/schemanode)以外，`headerToolbar`和`footerToolbar`还支持一些针对列表场景而内置的一些常用组件，下面分别介绍：
+### 其它 amis 组件
+
+在 `headerToolbar` 和 `footerToolbar` 中可以配置各种 amis 其它组件，比如按钮和 tpl：
+
+```schema: scope="body"
+{
+    "type": "crud",
+    "name": "myCRUD",
+    "syncLocation": false,
+    "api": "https://3xsw4ap8wah59.cfc-execute.bj.baidubce.com/api/amis-mock/sample",
+    "headerToolbar": [
+        {
+            "label": "点击弹框",
+            "type": "button",
+            "actionType": "dialog",
+            "icon": "fa fa-plus",
+            "level": "primary",
+            "dialog": {
+                "title": "弹框标题",
+                "body": "这是一个弹框"
+            }
+        },
+        {
+            "type": "tpl",
+            "tpl": "自定义模板"
+        },
+        {
+            "label": "",
+            "icon": "fa fa-repeat",
+            "type": "button",
+            "actionType": "reload",
+            "target": "myCRUD",
+            "align": "right"
+        }
+    ],
+    "footerToolbar": [],
+    "columns": [
+        {
+            "name": "id",
+            "label": "ID"
+        }
+    ]
+}
+```
 
 ### 分页
 
@@ -1172,7 +1215,7 @@ crud 组件支持通过配置`headerToolbar`和`footerToolbar`属性，实现在
 - `rows` items 的别名，推荐用 items。
 - `selectedItems` `Array<object>` 选中的行数据，建议直接用 items。
 - `unselectedItems` `Array<object>` 没选中的行数据也可获取。
-- `ids` `Array<number|string>` 前提是行数据中有 id 字段，或者有指定的 `primaryField` 字段。
+- `ids` `string` 多个 id 值用英文逗号隔开，前提是行数据中有 id 字段，或者有指定的 `primaryField` 字段。
 - `第一行所有行数据` 还有第一行的所有行数据也会包含进去。
 
 你可以通过[数据映射](../../docs/concepts/data-mapping)，在`api`中获取这些参数。
@@ -1185,6 +1228,80 @@ crud 组件支持通过配置`headerToolbar`和`footerToolbar`属性，实现在
 
 1. 批量操作按钮上配置 `disabledOn` 值为 `this.selectedItems.some(item => item.owner === this.amisUser.name)`
 2. 给表格加上 `itemCheckableOn` 值为 `this.owner === this.amisUser.name` 表示只有 owner 是自己的才可以打勾。
+
+**保留条目选择**
+
+默认分页、搜素后，用户选择条目会被清空，配置`keepItemSelectionOnPageChange`属性后会保留用户选择，可以实现跨页面批量操作。
+同时可以通过配置`maxKeepItemSelectionLength`属性限制最大勾选数
+
+```schema: scope="body"
+{
+    "type": "crud",
+    "syncLocation": false,
+    "api": "https://3xsw4ap8wah59.cfc-execute.bj.baidubce.com/api/amis-mock/sample",
+    "headerToolbar": [
+        "bulkActions"
+    ],
+    "keepItemSelectionOnPageChange": true,
+    "maxKeepItemSelectionLength": 4,
+    "bulkActions": [
+        {
+            "label": "批量删除",
+            "actionType": "ajax",
+            "api": "delete:https://3xsw4ap8wah59.cfc-execute.bj.baidubce.com/api/amis-mock/sample/${ids|raw}",
+            "confirmText": "确定要批量删除?"
+        },
+        {
+            "label": "批量修改",
+            "actionType": "dialog",
+            "dialog": {
+                "title": "批量编辑",
+                "body": {
+                    "type": "form",
+                    "api": "https://3xsw4ap8wah59.cfc-execute.bj.baidubce.com/api/amis-mock/sample/bulkUpdate2",
+                    "controls": [
+                        {
+                            "type": "hidden",
+                            "name": "ids"
+                        },
+                        {
+                            "type": "text",
+                            "name": "engine",
+                            "label": "Engine"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "columns": [
+        {
+            "name": "id",
+            "label": "ID"
+        },
+        {
+            "name": "engine",
+            "label": "Rendering engine"
+        },
+        {
+            "name": "browser",
+            "label": "Browser"
+        },
+        {
+            "name": "platform",
+            "label": "Platform(s)"
+        },
+        {
+            "name": "version",
+            "label": "Engine version"
+        },
+        {
+            "name": "grade",
+            "label": "CSS grade"
+        }
+    ]
+}
+```
 
 ### 数据统计
 
@@ -1694,6 +1811,20 @@ CRUD 中不限制有多少个单条操作、添加一个操作对应的添加一
 上例使用了数据映射中的`filter`过滤器，在前端实现了`engine`列的搜索功能。
 
 > **注意：**如果你的数据量较大，请务必使用服务端分页的方案，过多的前端数据展示，会显著影响前端页面的性能
+
+## 动态列
+
+> since 1.1.6
+
+在 1.1.6 之前的版本，只能通过 service + schemaApi 让后端返回 schema 配置来实现，1.1.6 版本之后可以直接通过 crud 的数据接口返回了。
+用这种方式可以简化动态列的实现，与 items 并列返回 columns 数组即即可。
+
+```schema: scope="body"
+{
+    "type": "crud",
+    "api": "https://3xsw4ap8wah59.cfc-execute.bj.baidubce.com/api/amis-mock/crud/dynamic?waitSeconds=1"
+}
+```
 
 ## 属性表
 

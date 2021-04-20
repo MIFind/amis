@@ -27,7 +27,7 @@ import {Api} from '../types';
 import {LocaleProps, localeable} from '../locale';
 import Spinner from './Spinner';
 import {Option, Options} from '../Schema';
-import {withRemoteOptions} from './WithRemoteOptions';
+import {RemoteOptionsProps, withRemoteConfig} from './WithRemoteConfig';
 
 export {Option, Options};
 
@@ -334,6 +334,7 @@ export class Select extends React.Component<SelectProps, SelectState> {
     this.handleChange = this.handleChange.bind(this);
     this.handleInputChange = this.handleInputChange.bind(this);
     this.clearValue = this.clearValue.bind(this);
+    this.clearSearchValue = this.clearSearchValue.bind(this);
     this.handleStateChange = this.handleStateChange.bind(this);
     this.handleKeyPress = this.handleKeyPress.bind(this);
     this.getTarget = this.getTarget.bind(this);
@@ -562,10 +563,8 @@ export class Select extends React.Component<SelectProps, SelectState> {
   }
 
   handleStateChange(changes: any) {
-    const {multiple, checkAll, loadOptions} = this.props;
-    let {inputValue} = this.state;
+    const {multiple, checkAll} = this.props;
     let update: any = {};
-    let doLoad = false;
 
     switch (changes.type) {
       case DownshiftChangeTypes.keyDownEnter:
@@ -573,11 +572,11 @@ export class Select extends React.Component<SelectProps, SelectState> {
         update = {
           ...update,
           isOpen: multiple ? true : false,
-          isFocused: multiple && checkAll ? true : false,
-          inputValue: !multiple ? '' : inputValue
+          isFocused: multiple && checkAll ? true : false
         };
-        doLoad = !multiple;
         break;
+      case DownshiftChangeTypes.controlledPropUpdatedSelectedItem:
+
       case DownshiftChangeTypes.changeInput:
         update.highlightedIndex = 0;
         break;
@@ -592,10 +591,7 @@ export class Select extends React.Component<SelectProps, SelectState> {
     }
 
     if (Object.keys(update).length) {
-      this.setState(
-        update,
-        doLoad && loadOptions ? () => loadOptions('') : undefined
-      );
+      this.setState(update);
     }
   }
 
@@ -611,6 +607,16 @@ export class Select extends React.Component<SelectProps, SelectState> {
     e.preventDefault();
     e.stopPropagation();
     onChange(this.props.resetValue);
+  }
+
+  clearSearchValue() {
+    const {loadOptions} = this.props;
+    this.setState(
+      {
+        inputValue: ''
+      },
+      () => loadOptions?.('')
+    );
   }
 
   handleAddClick() {
@@ -843,6 +849,11 @@ export class Select extends React.Component<SelectProps, SelectState> {
                 ref: this.inputRef
               })}
             />
+            {inputValue?.length ? (
+              <a onClick={this.clearSearchValue} className={cx('Select-clear')}>
+                <Icon icon="close" className="icon" />
+              </a>
+            ) : null}
           </div>
         ) : null}
 
@@ -1001,7 +1012,7 @@ export class Select extends React.Component<SelectProps, SelectState> {
   }
 }
 
-const enhancedSelect = themeable(
+const EnhancedSelect = themeable(
   localeable(
     uncontrollable(Select, {
       value: 'onChange'
@@ -1009,13 +1020,32 @@ const enhancedSelect = themeable(
   )
 );
 
-export default enhancedSelect;
-export const SelectWithRemoteOptions = withRemoteOptions(
-  enhancedSelect
-) as React.ComponentType<
-  React.ComponentProps<typeof enhancedSelect> & {
-    source?: any;
-    options?: Options;
-    data?: any;
+export default EnhancedSelect;
+export const SelectWithRemoteOptions = withRemoteConfig<Array<Options>>({
+  adaptor: data => data.options || data.items || data.rows || data,
+  normalizeConfig: (options: any, origin) => {
+    options = normalizeOptions(options);
+
+    if (Array.isArray(options)) {
+      return options.concat();
+    }
+
+    return origin;
   }
->;
+})(
+  class extends React.Component<
+    RemoteOptionsProps<Array<Options>> &
+      React.ComponentProps<typeof EnhancedSelect>
+  > {
+    render() {
+      const {loading, config, ...rest} = this.props;
+      return (
+        <EnhancedSelect
+          {...rest}
+          options={config || rest.options || []}
+          loading={loading}
+        />
+      );
+    }
+  }
+);

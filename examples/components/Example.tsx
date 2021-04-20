@@ -2,7 +2,7 @@ import React from 'react';
 import {match} from 'path-to-regexp';
 import makeSchemaRenderer from './SchemaRender';
 
-import SimplePageSchema from './Page/Simple';
+import IndexPageSchema from './Index';
 import ErrorPageSchema from './Page/Error';
 import FormPageSchema from './Page/Form';
 import ModeFormSchema from './Form/Mode';
@@ -50,6 +50,7 @@ import HeaderGroupSchema from './CRUD/HeaderGroup';
 import HeaderHideSchema from './CRUD/HeaderHide';
 import LoadOnceTableCrudSchema from './CRUD/LoadOnce';
 import ExportCSVExcelSchema from './CRUD/ExportCSVExcel';
+import CRUDDynamicSchema from './CRUD/Dynamic';
 import SdkTest from './Sdk/Test';
 import JSONSchemaForm from './Form/Schem';
 import SimpleDialogSchema from './Dialog/Simple';
@@ -91,14 +92,14 @@ export const examples = [
     children: [
       {
         label: '页面',
-        icon: 'glyphicon glyphicon-th',
+        icon: 'fa fa-th',
         badge: 3,
         badgeClassName: 'bg-info',
         children: [
           {
             label: '简单页面',
-            path: '/examples/pages/simple',
-            component: makeSchemaRenderer(SimplePageSchema)
+            path: '/examples/index',
+            component: makeSchemaRenderer(IndexPageSchema)
           },
           {
             label: '初始化出错',
@@ -367,6 +368,11 @@ export const examples = [
             label: '导出 Excel/CSV',
             path: '/examples/crud/export-excel-csv',
             component: makeSchemaRenderer(ExportCSVExcelSchema)
+          },
+          {
+            label: '动态列',
+            path: '/examples/crud/dynamic',
+            component: makeSchemaRenderer(CRUDDynamicSchema)
           }
           // {
           //     label: '测试',
@@ -564,6 +570,22 @@ export const examples = [
           session: 'jssdk',
           jumpTo: (to: string) => {
             location.hash = to;
+          },
+          updateLocation: (to, replace) => {
+            if (to === 'goBack') {
+              return window.history.back();
+            }
+
+            if (replace && window.history.replaceState) {
+              window.history.replaceState(
+                '',
+                document.title,
+                normalizeLink(to)
+              );
+              return;
+            }
+
+            window.history.pushState('', document.title, normalizeLink(to));
           },
           isCurrentUrl: (to: string, ctx: any) => {
             if (!to) {

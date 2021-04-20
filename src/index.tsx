@@ -48,6 +48,7 @@ export * from './Schema';
 import './renderers/Action';
 import './renderers/Alert';
 import './renderers/App';
+import './renderers/Avatar';
 import './renderers/Remark';
 import './renderers/ButtonGroup';
 import './renderers/ButtonToolbar';
@@ -135,6 +136,7 @@ import './renderers/Page';
 import './renderers/PaginationWrapper';
 import './renderers/Panel';
 import './renderers/Plain';
+import './renderers/Property';
 import './renderers/Spinner';
 import './renderers/Table/index';
 import './renderers/Tabs';
@@ -163,12 +165,17 @@ import './renderers/Icon';
 import './renderers/Carousel';
 import './renderers/AnchorNav';
 import './renderers/Form/AnchorNav';
+import './renderers/Steps';
+import './renderers/Markdown';
+
 import Scoped, {ScopedContext} from './Scoped';
 
 import {FormItem, registerFormItem} from './renderers/Form/Item';
 
 // 兼容旧版本用法
 import './compat';
+
+import './envOverwrite';
 
 import './themes/default';
 import './themes/cxd';

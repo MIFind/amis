@@ -154,6 +154,7 @@ export class App extends React.PureComponent<{
     super(props);
     this.setNavigations = this.setNavigations.bind(this);
     this.setNavigationFilter = this.setNavigationFilter.bind(this);
+    document.querySelector('body').classList.add(this.state.theme.value);
   }
 
   componentDidUpdate(preProps, preState) {
@@ -185,7 +186,8 @@ export class App extends React.PureComponent<{
 
   setNavigations(items) {
     this.setState({
-      navigations: items
+      navigations: items,
+      filter: ''
     });
   }
 
@@ -269,7 +271,10 @@ export class App extends React.PureComponent<{
             <Link to={`${ContextPath}/zh-CN/style`} activeClassName="is-active">
               样式
             </Link>
-            <Link to={`${ContextPath}/examples`} activeClassName="is-active">
+            <Link
+              to={`${ContextPath}/examples/index`}
+              activeClassName="is-active"
+            >
               示例
             </Link>
             <a
@@ -364,8 +369,10 @@ export class App extends React.PureComponent<{
         <InputBox
           theme={this.state.theme.value}
           placeholder={'过滤...'}
+          value={this.state.filter || ''}
           onChange={this.setNavigationFilter}
           className="m-b m-r-md"
+          clearable={false}
         />
         {this.renderAsideNav()}
       </div>
@@ -692,7 +699,7 @@ export default function entry({pathPrefix}) {
         {/* expamles */}
         <Redirect
           from={`${ContextPath}/examples`}
-          to={`${ContextPath}/examples/pages/simple`}
+          to={`${ContextPath}/examples/index`}
         />
         <Redirect
           from={`${ContextPath}/${locate}/style`}

@@ -248,6 +248,7 @@ export interface TableProps extends RendererProps {
   source?: string;
   selectable?: boolean;
   selected?: Array<any>;
+  maxKeepItemSelectionLength?: number;
   valueField?: string;
   draggable?: boolean;
   columnsTogglable?: boolean | 'auto';
@@ -276,7 +277,7 @@ export interface TableProps extends RendererProps {
   onSave?: (
     items: Array<object> | object,
     diff: Array<object> | object,
-    rowIndexes: Array<number> | number,
+    rowIndexes: Array<string> | string,
     unModifiedItems?: Array<object>,
     rowOrigins?: Array<object> | object,
     resetOnFailed?: boolean
@@ -458,7 +459,9 @@ export default class Table extends React.Component<TableProps, object> {
       hideCheckToggler,
       combineNum,
       expandConfig,
-      formItem
+      formItem,
+      keepItemSelectionOnPageChange,
+      maxKeepItemSelectionLength
     } = this.props;
 
     store.update({
@@ -475,7 +478,9 @@ export default class Table extends React.Component<TableProps, object> {
       itemCheckableOn,
       itemDraggableOn,
       hideCheckToggler,
-      combineNum
+      combineNum,
+      keepItemSelectionOnPageChange,
+      maxKeepItemSelectionLength
     });
 
     formItem && isAlive(formItem) && formItem.setSubStore(store);
@@ -649,7 +654,7 @@ export default class Table extends React.Component<TableProps, object> {
     onSave(
       item.data,
       difference(item.data, item.pristine, ['id', primaryField]),
-      item.index,
+      item.path,
       undefined,
       item.pristine,
       resetOnFailed
@@ -676,7 +681,7 @@ export default class Table extends React.Component<TableProps, object> {
     }
 
     const rows = store.modifiedRows.map(item => item.data);
-    const rowIndexes = store.modifiedRows.map(item => item.index);
+    const rowIndexes = store.modifiedRows.map(item => item.path);
     const diff = store.modifiedRows.map(item =>
       difference(item.data, item.pristine, ['id', primaryField])
     );
@@ -759,7 +764,16 @@ export default class Table extends React.Component<TableProps, object> {
     const clip = (this.table as HTMLElement).getBoundingClientRect();
     const offsetY =
       this.props.affixOffsetTop ?? this.props.env.affixOffsetTop ?? 0;
-    const affixed = clip.top < offsetY && clip.top + clip.height - 40 > offsetY;
+    const headingHeight =
+      dom.querySelector(`.${ns}Table-heading`)?.getBoundingClientRect()
+        .height || 0;
+    const headerHeight =
+      dom.querySelector(`.${ns}Table-headToolbar`)?.getBoundingClientRect()
+        .height || 0;
+
+    const affixed =
+      clip.top - headerHeight - headingHeight < offsetY &&
+      clip.top + clip.height - 40 > offsetY;
     const affixedDom = dom.querySelector(`.${ns}Table-fixedTop`) as HTMLElement;
 
     affixedDom.style.cssText += `top: ${offsetY}px;width: ${
@@ -1252,6 +1266,7 @@ export default class Table extends React.Component<TableProps, object> {
               classPrefix={ns}
               partial={!store.allChecked}
               checked={store.someChecked}
+              disabled={store.disabledHeadCheckbox}
               onChange={this.handleCheckAll}
             />
           ) : (
@@ -1434,16 +1449,15 @@ export default class Table extends React.Component<TableProps, object> {
     if (column.type === '__checkme') {
       return (
         <td key={props.key} className={cx(column.pristine.className)}>
-          {item.checkable ? (
-            <Checkbox
-              classPrefix={ns}
-              type={multiple ? 'checkbox' : 'radio'}
-              checked={item.checked}
-              onChange={
-                checkOnItemClick ? noop : this.handleCheck.bind(this, item)
-              }
-            />
-          ) : null}
+          <Checkbox
+            classPrefix={ns}
+            type={multiple ? 'checkbox' : 'radio'}
+            checked={item.checked}
+            disabled={item.checkdisable}
+            onChange={
+              checkOnItemClick ? noop : this.handleCheck.bind(this, item)
+            }
+          />
         </td>
       );
     } else if (column.type === '__dragme') {

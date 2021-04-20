@@ -31,7 +31,12 @@ import pick from 'lodash/pick';
 import qs from 'qs';
 import {findDOMNode} from 'react-dom';
 import {evalExpression, filter} from '../utils/tpl';
-import {isValidApi, buildApi, isEffectiveApi} from '../utils/api';
+import {
+  isValidApi,
+  buildApi,
+  isEffectiveApi,
+  isApiOutdated
+} from '../utils/api';
 import omit from 'lodash/omit';
 import find from 'lodash/find';
 import findIndex from 'lodash/findIndex';
@@ -512,22 +517,23 @@ export default class CRUD extends React.Component<CRUDProps, any> {
         this.lastQuery,
         false
       );
-    } else if (!props.syncLocation && props.api && nextProps.api) {
-      // 如果不同步地址栏，则直接看api上是否绑定参数，结果变了就重新刷新。
-      let prevApi = buildApi(props.api, props.data as object, {
-        ignoreData: true
-      });
-      let nextApi = buildApi(nextProps.api, nextProps.data as object, {
-        ignoreData: true
-      });
-
-      if (
-        prevApi.url !== nextApi.url &&
-        isValidApi(nextApi.url) &&
-        (!nextApi.sendOn || evalExpression(nextApi.sendOn, nextProps.data))
-      ) {
-        this.dataInvalid = true;
-      }
+    } else if (
+      props.api &&
+      nextProps.api &&
+      isApiOutdated(
+        props.api,
+        nextProps.api,
+        store.fetchCtxOf(props.data, {
+          pageField: props.pageField,
+          perPageField: props.perPageField
+        }),
+        store.fetchCtxOf(nextProps.data, {
+          pageField: nextProps.pageField,
+          perPageField: nextProps.perPageField
+        })
+      )
+    ) {
+      this.dataInvalid = true;
     }
   }
 
@@ -1087,7 +1093,7 @@ export default class CRUD extends React.Component<CRUDProps, any> {
   handleSave(
     rows: Array<object> | object,
     diff: Array<object> | object,
-    indexes: Array<number>,
+    indexes: Array<string>,
     unModifiedItems?: Array<any>,
     rowsOrigin?: Array<object> | object,
     resetOnFailed?: boolean
@@ -1612,7 +1618,7 @@ export default class CRUD extends React.Component<CRUDProps, any> {
     ) : null;
   }
 
-  renderPagination() {
+  renderPagination(toolbar: SchemaNode) {
     const {store, render, classnames: cx, alwaysShowPagination} = this.props;
 
     const {page, lastPage} = store;
@@ -1625,6 +1631,12 @@ export default class CRUD extends React.Component<CRUDProps, any> {
       return null;
     }
 
+    const extraProps: any = {};
+    if (typeof toolbar !== 'string') {
+      extraProps.showPageInput = (toolbar as Schema).showPageInput;
+      extraProps.maxButtons = (toolbar as Schema).maxButtons;
+    }
+
     return (
       <div className={cx('Crud-pager')}>
         {render(
@@ -1633,6 +1645,7 @@ export default class CRUD extends React.Component<CRUDProps, any> {
             type: 'pagination'
           },
           {
+            ...extraProps,
             activePage: page,
             lastPage: lastPage,
             hasNext: store.hasNext,
@@ -1787,7 +1800,7 @@ export default class CRUD extends React.Component<CRUDProps, any> {
     if (type === 'bulkActions' || type === 'bulk-actions') {
       return this.renderBulkActions(childProps);
     } else if (type === 'pagination') {
-      return this.renderPagination();
+      return this.renderPagination(toolbar);
     } else if (type === 'statistics') {
       return this.renderStatistics();
     } else if (type === 'switch-per-page') {
@@ -1985,6 +1998,7 @@ export default class CRUD extends React.Component<CRUDProps, any> {
       itemActions,
       classnames: cx,
       keepItemSelectionOnPageChange,
+      maxKeepItemSelectionLength,
       onAction,
       popOverContainer,
       translate: __,
@@ -2027,6 +2041,7 @@ export default class CRUD extends React.Component<CRUDProps, any> {
           'body',
           {
             ...rest,
+            columns: store.columns ?? rest.columns,
             type: mode || 'table'
           },
           {
@@ -2048,6 +2063,8 @@ export default class CRUD extends React.Component<CRUDProps, any> {
               pickerMode || keepItemSelectionOnPageChange
                 ? store.selectedItemsAsArray
                 : undefined,
+            keepItemSelectionOnPageChange,
+            maxKeepItemSelectionLength,
             valueField: valueField || primaryField,
             primaryField: primaryField,
             hideQuickSaveBtn,

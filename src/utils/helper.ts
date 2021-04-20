@@ -439,6 +439,15 @@ export function isVisible(
   );
 }
 
+/**
+ * 过滤掉被隐藏的数组元素
+ */
+export function visibilityFilter(items: any, data?: object) {
+  return items.filter((item: any) => {
+    return isVisible(item, data);
+  });
+}
+
 export function isDisabled(
   schema: {
     disabledOn?: string;
@@ -1389,19 +1398,82 @@ export const keyToPath = (string: string) => {
 };
 
 /**
- * 深度查找具有某个 key 名字段的对象
+ * 检查对象是否有循环引用，来自 https://stackoverflow.com/a/34909127
  * @param obj
- * @param key
  */
-export function findObjectsWithKey(obj: any, key: string) {
+function isCyclic(obj: any): boolean {
+  const seenObjects: any = [];
+  function detect(obj: any) {
+    if (obj && typeof obj === 'object') {
+      if (seenObjects.indexOf(obj) !== -1) {
+        return true;
+      }
+      seenObjects.push(obj);
+      for (var key in obj) {
+        if (obj.hasOwnProperty(key) && detect(obj[key])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  return detect(obj);
+}
+
+function internalFindObjectsWithKey(obj: any, key: string) {
   let objects: any[] = [];
   for (const k in obj) {
     if (!obj.hasOwnProperty(k)) continue;
     if (k === key) {
       objects.push(obj);
     } else if (typeof obj[k] === 'object') {
-      objects = objects.concat(findObjectsWithKey(obj[k], key));
+      objects = objects.concat(internalFindObjectsWithKey(obj[k], key));
     }
   }
   return objects;
+}
+
+/**
+ * 深度查找具有某个 key 名字段的对象，实际实现是 internalFindObjectsWithKey，这里包一层是为了做循环引用检测
+ * @param obj
+ * @param key
+ */
+export function findObjectsWithKey(obj: any, key: string) {
+  // 避免循环引用导致死循环
+  if (isCyclic(obj)) {
+    return [];
+  }
+  return internalFindObjectsWithKey(obj, key);
+}
+
+let scrollbarWidth: number;
+
+/**
+ * 获取浏览器滚动条宽度 https://stackoverflow.com/a/13382873
+ */
+
+export function getScrollbarWidth() {
+  if (typeof scrollbarWidth !== 'undefined') {
+    return scrollbarWidth;
+  }
+  // Creating invisible container
+  const outer = document.createElement('div');
+  outer.style.visibility = 'hidden';
+  outer.style.overflow = 'scroll'; // forcing scrollbar to appear
+  // @ts-ignore
+  outer.style.msOverflowStyle = 'scrollbar'; // needed for WinJS apps
+  document.body.appendChild(outer);
+
+  // Creating inner element and placing it in the container
+  const inner = document.createElement('div');
+  outer.appendChild(inner);
+
+  // Calculating difference between container's full width and the child width
+  scrollbarWidth = outer.offsetWidth - inner.offsetWidth;
+
+  // Removing temporary elements from the DOM
+  // @ts-ignore
+  outer.parentNode.removeChild(outer);
+
+  return scrollbarWidth;
 }

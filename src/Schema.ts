@@ -46,13 +46,15 @@ import {VideoSchema} from './renderers/Video';
 import {WizardSchema} from './renderers/Wizard';
 import {WrapperSchema} from './renderers/Wrapper';
 import {TableSchema} from './renderers/Table';
-import {DialogSchema} from './renderers/Dialog';
+import {DialogSchema, DialogSchemaBase} from './renderers/Dialog';
 import {DrawerSchema} from './renderers/Drawer';
 import {SearchBoxSchema} from './renderers/SearchBox';
 import {SparkLineSchema} from './renderers/SparkLine';
 import {PaginationWrapperSchema} from './renderers/PaginationWrapper';
 import {PaginationSchema} from './renderers/Pagination';
 import {AnchorNavSchema} from './renderers/AnchorNav';
+import {AvatarSchema} from './renderers/Avatar';
+import {StepsSchema} from './renderers/Steps';
 
 // 每加个类型，这补充一下。
 export type SchemaType =
@@ -63,6 +65,7 @@ export type SchemaType =
   | 'alert'
   | 'app'
   | 'audio'
+  | 'avatar'
   | 'button-group'
   | 'button-toolbar'
   | 'breadcrumb'
@@ -89,6 +92,7 @@ export type SchemaType =
   | 'drawer'
   | 'each'
   | 'flex'
+  | 'flex-item'
   | 'grid'
   | 'grid-2d'
   | 'hbox'
@@ -106,10 +110,12 @@ export type SchemaType =
   | 'static-list' // 这个几个跟表单项同名，再form下面用必须带前缀 static-
   | 'map'
   | 'mapping'
+  | 'markdown'
   | 'nav'
   | 'page'
   | 'pagination'
   | 'pagination-wrapper'
+  | 'property'
   | 'operation'
   | 'panel'
   | 'plain'
@@ -133,7 +139,8 @@ export type SchemaType =
   | 'video'
   | 'wizard'
   | 'wrapper'
-  | 'anchor-nav';
+  | 'anchor-nav'
+  | 'steps';
 
 export type SchemaObject =
   | PageSchema
@@ -142,6 +149,7 @@ export type SchemaObject =
   | ActionSchema
   | AlertSchema
   | AudioSchema
+  | AvatarSchema
   | ButtonGroupSchema
   | ButtonToolbarSchema
   | CardSchema
@@ -190,7 +198,8 @@ export type SchemaObject =
   | WizardSchema
   | WrapperSchema
   | FormSchema
-  | AnchorNavSchema;
+  | AnchorNavSchema
+  | StepsSchema;
 
 export type SchemaCollection =
   | SchemaObject
@@ -265,7 +274,7 @@ export interface SchemaApiObject {
    *
    * 如果想通过 body 发送给后端，那么请把这个配置成 false。
    *
-   * 但是，浏览器还不支持啊，设置了只是摆设。
+   * 但是，浏览器还不支持啊，设置了只是摆设。除非服务端支持 method-override
    */
   attachDataToQuery?: boolean;
 
@@ -298,8 +307,16 @@ export interface SchemaApiObject {
 
   /**
    * 是否自动刷新，当 url 中的取值结果变化时，自动刷新数据。
+   *
+   * @default true
    */
   autoRefresh?: boolean;
+
+  /**
+   * 当开启自动刷新的时候，默认是 api 的 url 来自动跟踪变量变化的。
+   * 如果你希望监控 url 外的变量，请配置 traceExpression。
+   */
+  trackExpression?: string;
 
   /**
    * 如果设置了值，同一个接口，相同参数，指定的时间（单位：ms）内请求将直接走缓存。
@@ -527,5 +544,22 @@ export interface Option {
   [propName: string]: any;
 }
 export interface Options extends Array<Option> {}
+
+export interface FeedbackDialog extends DialogSchemaBase {
+  /**
+   * 可以用来配置 feedback 的出现条件
+   */
+  visibleOn?: string;
+
+  /**
+   * feedback 弹框取消是否中断后续操作
+   */
+  skipRestOnCancel?: boolean;
+
+  /**
+   * feedback 弹框确认是否中断后续操作
+   */
+  skipRestOnConfirm?: boolean;
+}
 
 export type RootSchema = PageSchema;

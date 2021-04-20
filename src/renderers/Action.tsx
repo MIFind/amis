@@ -122,7 +122,7 @@ export interface AjaxActionSchema extends ButtonSchema {
    */
   api: SchemaApi;
 
-  feedback?: DialogSchemaBase;
+  feedback?: FeedbackDialog;
 
   reload?: SchemaReload;
   redirect?: string;
@@ -295,6 +295,7 @@ import {ClassNamesFn, themeable, ThemeProps} from '../theme';
 import {autobind} from '../utils/helper';
 import {
   BaseSchema,
+  FeedbackDialog,
   SchemaApi,
   SchemaClassName,
   SchemaExpression,
@@ -306,6 +307,7 @@ import {
 import {DialogSchema, DialogSchemaBase} from './Dialog';
 import {DrawerSchema, DrawerSchemaBase} from './Drawer';
 import {generateIcon} from '../utils/icon';
+import {withBadge} from '../components/Badge';
 
 export interface ActionProps
   extends Omit<ButtonSchema, 'className' | 'iconClassName'>,
@@ -482,8 +484,8 @@ export class Action extends React.Component<ActionProps, ActionState> {
         })}
         onClick={this.handleAction}
       >
-        {label}
         {iconElement}
+        {label}
       </a>
     ) : (
       <Button
@@ -507,8 +509,8 @@ export class Action extends React.Component<ActionProps, ActionState> {
         block={block}
         iconOnly={!!(icon && !label && level !== 'link')}
       >
-        {label ? <span>{filter(String(label), data)}</span> : null}
         {iconElement}
+        {label ? <span>{filter(String(label), data)}</span> : null}
       </Button>
     );
   }

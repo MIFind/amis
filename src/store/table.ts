@@ -41,6 +41,7 @@ export const Column = types
     toggled: false,
     toggable: true,
     expandable: false,
+    checkdisable: false,
     isPrimary: false,
     searchable: types.maybe(types.frozen()),
     sortable: false,
@@ -82,7 +83,9 @@ export const Row = types
     rowSpans: types.frozen({} as any),
     index: types.number,
     newIndex: types.number,
+    path: '', // 行数据的位置
     expandable: false,
+    checkdisable: false,
     isHover: false,
     children: types.optional(
       types.array(types.late((): IAnyModelType => Row)),
@@ -149,11 +152,21 @@ export const Row = types
     },
 
     get locals(): any {
+      let children: Array<any> | null = null;
+      if (self.children.length) {
+        children = self.children.map(item => item.locals);
+      }
+
       return createObject(
         extendObject((getParent(self, self.depth * 2) as ITableStore).data, {
           index: self.index
         }),
-        self.data
+        children
+          ? {
+              ...self.data,
+              children
+            }
+          : self.data
       );
     },
 
@@ -190,6 +203,10 @@ export const Row = types
     reset() {
       self.newIndex = self.index;
       self.data = self.pristine;
+    },
+
+    setCheckdisable(bool: boolean) {
+      self.checkdisable = bool;
     },
 
     setIsHover(value: boolean) {
@@ -260,7 +277,9 @@ export const TableStore = iRendererStore
     itemDraggableOn: '',
     hideCheckToggler: false,
     combineNum: 0,
-    formsRef: types.optional(types.array(types.frozen()), [])
+    formsRef: types.optional(types.array(types.frozen()), []),
+    maxKeepItemSelectionLength: 0,
+    keepItemSelectionOnPageChange: false
   })
   .views(self => {
     function getForms() {
@@ -502,7 +521,8 @@ export const TableStore = iRendererStore
 
       get allExpanded() {
         return !!(
-          self.expandedRows.length === self.rows.length && self.rows.length
+          self.expandedRows.length === this.expandableRows.length &&
+          this.expandableRows.length
         );
       },
 
@@ -528,6 +548,10 @@ export const TableStore = iRendererStore
         return self.rows.filter(item => item.checkable);
       },
 
+      get expandableRows() {
+        return self.rows.filter(item => item.expandable);
+      },
+
       get moved() {
         return getMoved();
       },
@@ -538,6 +562,17 @@ export const TableStore = iRendererStore
 
       get hoverIndex() {
         return getHoverIndex();
+      },
+
+      get disabledHeadCheckbox() {
+        const selectedLength = self.data?.selectedItems.length;
+        const maxLength = self.maxKeepItemSelectionLength;
+
+        if (!self.data || !self.keepItemSelectionOnPageChange || !maxLength) {
+          return false;
+        }
+
+        return maxLength === selectedLength;
       },
 
       getData,
@@ -586,6 +621,12 @@ export const TableStore = iRendererStore
 
       config.combineNum !== void 0 &&
         (self.combineNum = parseInt(config.combineNum as any, 10) || 0);
+
+      config.maxKeepItemSelectionLength !== void 0 &&
+        (self.maxKeepItemSelectionLength = config.maxKeepItemSelectionLength);
+      config.keepItemSelectionOnPageChange !== void 0 &&
+        (self.keepItemSelectionOnPageChange =
+          config.keepItemSelectionOnPageChange);
 
       if (config.columns && Array.isArray(config.columns)) {
         let columns: Array<SColumn> = config.columns
@@ -703,10 +744,11 @@ export const TableStore = iRendererStore
       children: Array<any>,
       depth: number,
       pindex: number,
-      parentId: string
+      parentId: string,
+      path: string = ''
     ): any {
       depth += 1;
-      return children.map((item, key) => {
+      return children.map((item, index) => {
         item = isObject(item)
           ? item
           : {
@@ -718,16 +760,23 @@ export const TableStore = iRendererStore
           // id: String(item && (item as any)[self.primaryField] || `${pindex}-${depth}-${key}`),
           id: id,
           parentId,
-          key: String(`${pindex}-${depth}-${key}`),
+          key: String(`${pindex}-${depth}-${index}`),
+          path: `${path}${index}`,
           depth: depth,
-          index: key,
-          newIndex: key,
+          index: index,
+          newIndex: index,
           pristine: item,
           data: item,
           rowSpans: {},
           children:
             item && Array.isArray(item.children)
-              ? initChildren(item.children, depth, key, id)
+              ? initChildren(
+                  item.children,
+                  depth,
+                  index,
+                  id,
+                  `${path}${index}.`
+                )
               : [],
           expandable: !!(
             (item && Array.isArray(item.children) && item.children.length) ||
@@ -742,23 +791,24 @@ export const TableStore = iRendererStore
       getEntryId?: (entry: any, index: number) => string
     ) {
       self.selectedRows.clear();
-      self.expandedRows.clear();
+      // self.expandedRows.clear();
 
-      let arr: Array<SRow> = rows.map((item, key) => {
-        let id = getEntryId ? getEntryId(item, key) : guid();
+      let arr: Array<SRow> = rows.map((item, index) => {
+        let id = getEntryId ? getEntryId(item, index) : guid();
         return {
           // id: getEntryId ? getEntryId(item, key) : String(item && (item as any)[self.primaryField] || `${key}-1-${key}`),
           id: id,
-          key: String(`${key}-1-${key}`),
+          key: String(`${index}-1-${index}`),
           depth: 1, // 最大父节点默认为第一层，逐层叠加
-          index: key,
-          newIndex: key,
+          index: index,
+          newIndex: index,
           pristine: item,
+          path: `${index}`,
           data: item,
           rowSpans: {},
           children:
             item && Array.isArray(item.children)
-              ? initChildren(item.children, 1, key, id)
+              ? initChildren(item.children, 1, index, id, `${index}.`)
               : [],
           expandable: !!(
             (item && Array.isArray(item.children) && item.children.length) ||
@@ -832,13 +882,35 @@ export const TableStore = iRendererStore
           self.selectedRows.push(item);
         }
       });
+      updateCheckDisable();
     }
 
     function toggleAll() {
+      const maxLength = self.maxKeepItemSelectionLength;
+      const keep = self.keepItemSelectionOnPageChange;
+
       if (self.allChecked) {
         self.selectedRows.clear();
       } else {
-        self.selectedRows.replace(self.checkableRows);
+        const selectedItems = self.data?.selectedItems;
+
+        if (
+          keep &&
+          maxLength &&
+          selectedItems &&
+          maxLength >= selectedItems.length
+        ) {
+          const restCheckableRows = self.checkableRows.filter(
+            item => !item.checked
+          );
+          const checkableRows = restCheckableRows.filter(
+            (item, i) => i < maxLength - selectedItems.length
+          );
+
+          self.selectedRows.replace([...self.selectedRows, ...checkableRows]);
+        } else {
+          self.selectedRows.replace(self.checkableRows);
+        }
       }
     }
 
@@ -858,6 +930,25 @@ export const TableStore = iRendererStore
       }
     }
 
+    function updateCheckDisable() {
+      if (!self.data) {
+        return;
+      }
+      const maxLength = self.maxKeepItemSelectionLength;
+      const selectedItems = self.data.selectedItems;
+
+      self.selectedRows.map(item => item.setCheckdisable(false));
+      if (maxLength && maxLength <= selectedItems.length) {
+        self.unSelectedRows.map(
+          item => !item.checked && item.setCheckdisable(true)
+        );
+      } else {
+        self.unSelectedRows.map(
+          item => item.checkdisable && item.setCheckdisable(false)
+        );
+      }
+    }
+
     function clear() {
       self.selectedRows.clear();
     }
@@ -866,7 +957,7 @@ export const TableStore = iRendererStore
       if (self.allExpanded) {
         self.expandedRows.clear();
       } else {
-        self.expandedRows.replace(self.rows);
+        self.expandedRows.replace(self.rows.filter(item => item.expandable));
       }
     }
 

@@ -380,7 +380,8 @@ export default class Cards extends React.Component<GridProps, object> {
     const clip = (this.body as HTMLElement).getBoundingClientRect();
     const offsetY =
       this.props.affixOffsetTop ?? this.props.env.affixOffsetTop ?? 0;
-    const affixed = clip.top < offsetY && clip.top + clip.height - 40 > offsetY;
+    const affixed =
+      clip.top - 10 < offsetY && clip.top + clip.height - 40 > offsetY;
     const afixedDom = dom.querySelector(`.${ns}Cards-fixedTop`) as HTMLElement;
 
     this.body.offsetWidth &&
